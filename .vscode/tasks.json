@@ -1,31 +1,61 @@
 {
     "version": "2.0.0",
     "tasks": [
+        // =================================================================
+        //                             빌드 작업
+        // =================================================================
         {
-            "label": "build all",
+            "label": "Build Server",
             "type": "shell",
-            "command": "gcc",
-            "args": [
-                "-g",
-                "-o",
-                "main.exe",
-                "main.c"
-            ],
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "problemMatcher": ["$gcc"]
+            "command": "chcp 65001 && gcc -o bin/ps_server.exe src/ps_server.c src/user.c src/user_command.c -lws2_32",
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
         },
         {
-            "label": "clean",
+            "label": "Build Client",
             "type": "shell",
-            "command": "del",
-            "args": [
-                "main.exe"
-            ],
+            "command": "chcp 65001 && gcc -o bin/ps_client.exe src/ps_client.c src/user_menu.c src/common_input.c -lws2_32",
             "group": "build",
-            "problemMatcher": []
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        },
+        // =================================================================
+        //                             실행 작업
+        // =================================================================
+        {
+            "label": "Run Server",
+            "type": "shell",
+            "command": "start cmd /k \"chcp 65001 && .\\bin\\ps_server.exe\"",
+            "dependsOn": [
+                "Build Server"
+            ]
+        },
+        {
+            "label": "Run Client",
+            "type": "shell",
+            "command": "start cmd /k \"chcp 65001 && .\\bin\\ps_client.exe\"",
+            "dependsOn": [
+                "Build Client"
+            ]
+        },
+        // =================================================================
+        //                      단축키(Ctrl+Alt+R) 실행 그룹
+        // =================================================================
+        {
+            "label": "Run All (Server + Client)",
+            "dependsOn": [
+                "Run Server",
+                "Run Client"
+            ],
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            }
         }
     ]
-} 
+}
