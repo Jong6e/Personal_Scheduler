@@ -1,13 +1,10 @@
 {
     "version": "2.0.0",
     "tasks": [
-        // =================================================================
-        //                             빌드 작업
-        // =================================================================
         {
             "label": "Build Server",
             "type": "shell",
-            "command": "chcp 65001 && gcc -o bin/ps_server.exe src/ps_server.c src/user.c src/user_command.c -lws2_32",
+            "command": "chcp 65001 && gcc -o bin/ps_server.exe src/ps_server.c src/user.c src/user_command.c src/memo.c src/memo_command.c -lws2_32",
             "group": "build",
             "presentation": {
                 "reveal": "always",
@@ -17,16 +14,13 @@
         {
             "label": "Build Client",
             "type": "shell",
-            "command": "chcp 65001 && gcc -o bin/ps_client.exe src/ps_client.c src/user_menu.c src/common_input.c -lws2_32",
+            "command": "chcp 65001 && gcc -o bin/ps_client.exe src/ps_client.c src/user_menu.c src/common_input.c src/memo_menu.c src/main_menu.c -lws2_32",
             "group": "build",
             "presentation": {
                 "reveal": "always",
                 "panel": "new"
             }
         },
-        // =================================================================
-        //                             실행 작업
-        // =================================================================
         {
             "label": "Run Server",
             "type": "shell",
@@ -43,9 +37,6 @@
                 "Build Client"
             ]
         },
-        // =================================================================
-        //                      단축키(Ctrl+Alt+R) 실행 그룹
-        // =================================================================
         {
             "label": "Run All (Server + Client)",
             "dependsOn": [

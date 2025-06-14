@@ -3,18 +3,19 @@
 #ifndef COMMON_INPUT_H
 #define COMMON_INPUT_H
 
-#include <stddef.h>
 #include <stdbool.h>
+#include <winsock2.h>
 
-// ✅ 화면을 초기화하는 함수
+// 콘솔 화면을 깨끗하게 지웁니다.
 void clear_screen();
 
-// ✅ 사용자 입력을 안전하게 받는 함수 (ESC 키로 취소 가능)
-// - buffer: 입력을 저장할 버퍼
-// - size: 버퍼 크기
-// - label: 입력 필드 이름 (예: "ID 입력")
-// - masked: true일 경우 입력을 '*'로 마스킹
-// - 반환값: 입력 성공 시 true, 취소 시 false
-bool get_escapable_input(char *buffer, size_t size, const char *label, bool masked);
+// ESC로 취소 가능한, 유효성이 검증된 단일 라인 입력을 받는 함수.
+// is_password: true이면 입력 문자를 '*'로 마스킹합니다.
+// alphanumeric_only: true이면 영문/숫자만 입력을 허용합니다.
+bool get_validated_input(char *buffer, int buffer_size, const char *prompt, bool is_password, bool alphanumeric_only);
+
+// 한글을 포함한 자유로운 텍스트 한 줄을 입력받는 함수입니다.
+// (fgets 기반이므로 ESC 실시간 취소는 지원하지 않습니다)
+void get_line_input(char *buffer, int buffer_size, const char *prompt);
 
 #endif // COMMON_INPUT_H

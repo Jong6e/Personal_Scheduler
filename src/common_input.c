@@ -4,73 +4,88 @@
 #include <string.h>
 #include <conio.h>
 #include <windows.h>
+#include <ctype.h> // isalnum
 
 #define KEY_ESC 27
 #define KEY_ENTER 13
 #define KEY_BACKSPACE 8
 
-// ✅ 콘솔 화면을 초기화합니다.
+// 콘솔 화면을 깨끗하게 지웁니다.
 void clear_screen()
 {
+#ifdef _WIN32
     system("cls");
+#else
+    system("clear");
+#endif
 }
 
-// ✅ 사용자 입력을 안전하게 받는 함수 (ESC 키로 취소 가능)
-bool get_escapable_input(char *buffer, size_t size, const char *label, bool masked)
+// 사용자로부터 입력을 받되, ESC 키를 누르면 입력을 취소할 수 있습니다.
+// masked 옵션은 비밀번호처럼 입력 내용을 '*'로 가릴지 결정합니다.
+bool get_validated_input(char *buffer, int buffer_size, const char *prompt, bool is_password, bool alphanumeric_only)
 {
+    printf("%s: ", prompt);
     int i = 0;
     char ch;
 
-    printf("%s (ESC: 취소): ", label);
-
     while (true)
     {
-        ch = getch();
+        ch = _getch();
 
-        // Enter 키: 입력 완료
-        if (ch == KEY_ENTER)
+        if (ch == 27) // ESC 키
         {
-            if (i == 0)
-            { // 빈 입력 방지
-                printf("\n[오류] 값을 입력해야 합니다. 다시 시도하세요.\n");
-                printf("%s (ESC: 취소): ", label);
-                continue;
-            }
-            buffer[i] = '\0';
-            printf("\n");
-            return true;
-        }
-
-        // ESC 키: 입력 취소
-        if (ch == KEY_ESC)
-        {
-            buffer[0] = '\0';
-            printf("\n[알림] 입력이 취소되었습니다.\n");
-            Sleep(500); // 0.5초 대기
+            printf("\n[입력 취소]\n");
+            Sleep(500);
             return false;
         }
-
-        // Backspace 키: 글자 삭제
-        if (ch == KEY_BACKSPACE && i > 0)
+        else if (ch == '\r' || ch == '\n') // Enter 키
         {
-            printf("\b \b");
-            i--;
-            continue;
+            buffer[i] = '\0';
+            printf("\n");
+            break;
         }
-
-        // 입력 가능한 문자인 경우
-        if (ch >= 32 && ch <= 126)
+        else if (ch == '\b') // Backspace 키
         {
-            if (i < size - 1)
+            if (i > 0)
             {
-                buffer[i++] = ch;
-                printf(masked ? "*" : "%c", ch);
+                i--;
+                printf("\b \b");
+            }
+        }
+        else if (i < buffer_size - 1)
+        {
+            if (alphanumeric_only && !isalnum((unsigned char)ch))
+            {
+                continue; // 영문/숫자가 아니면 무시
+            }
+            buffer[i++] = ch;
+            if (is_password)
+            {
+                printf("*");
             }
             else
             {
-                // 버퍼가 가득 찼을 때 경고음
-                printf("\a");
+                printf("%c", ch);
             }
         }
+    }
+    return true;
+}
+
+void get_line_input(char *buffer, int buffer_size, const char *prompt)
+{
+    printf("%s: ", prompt);
+    // 이전의 _getch() 호출로 인해 입력 버퍼에 남아있을 수 있는 문자를 비움
+    fflush(stdin);
+
+    if (fgets(buffer, buffer_size, stdin) != NULL)
+    {
+        // fgets로 읽은 문자열 끝의 개행 문자(\n) 제거
+        buffer[strcspn(buffer, "\r\n")] = 0;
+    }
+    else
+    {
+        // 입력 스트림에 오류가 발생한 경우 버퍼를 비움
+        buffer[0] = '\0';
     }
 }

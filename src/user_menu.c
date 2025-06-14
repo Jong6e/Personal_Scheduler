@@ -1,6 +1,7 @@
 #include "user_menu.h"
 #include "common_input.h"
-#include "user.h" // USER_ID_MAX, USER_PW_MAX
+#include "user.h"      // USER_ID_MAX, USER_PW_MAX
+#include "main_menu.h" // 메모 메뉴 진입을 위해 추가
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,8 +10,6 @@
 #include <conio.h>   // getch 함수 사용을 위해 추가
 
 #define BUF_SIZE 1024
-
-// --- 내부 함수 ---
 
 // 서버에 요청을 보내고 응답을 받아 출력하는 헬퍼 함수
 static bool communicate_with_server(SOCKET sock, const char *request, char *reply)
@@ -31,9 +30,7 @@ static bool communicate_with_server(SOCKET sock, const char *request, char *repl
     return true;
 }
 
-// --- 외부 공개 함수 ---
-
-// ✅ 프로그램의 안전한 종료를 처리
+// 프로그램을 종료합니다.
 void exit_program(SOCKET sock)
 {
     printf("\n[클라이언트] 프로그램을 종료합니다.\n");
@@ -46,7 +43,7 @@ void exit_program(SOCKET sock)
     exit(0);
 }
 
-// ✅ 로그인 전 사용자 메뉴 메인 루프
+// 로그인 이전 사용자를 위한 메뉴입니다. (로그인, 회원가입, 종료)
 void user_menu_loop(SOCKET sock)
 {
     char option[10];
@@ -65,10 +62,17 @@ void user_menu_loop(SOCKET sock)
         printf("  0. 종료\n");
         printf("======================================================\n");
 
-        if (!get_escapable_input(option, sizeof(option), ">> 선택", false))
+        if (!get_validated_input(option, sizeof(option), ">> 선택", false, false))
             continue;
 
         int choice = atoi(option);
+
+        // 사용자가 "0"을 직접 입력한 경우가 아니면서 atoi의 결과가 0이면
+        // (예: "abc" 같은 문자열 입력) 잘못된 입력으로 처리합니다.
+        if (choice == 0 && strcmp(option, "0") != 0)
+        {
+            choice = -1; // switch문의 default로 보내기 위한 값
+        }
 
         switch (choice)
         {
@@ -77,17 +81,17 @@ void user_menu_loop(SOCKET sock)
             break;
 
         case 1: // 로그인
-            if (!get_escapable_input(id, sizeof(id), "  - 아이디", false))
+            if (!get_validated_input(id, sizeof(id), "  - 아이디", false, true))
                 continue;
-            if (!get_escapable_input(pw, sizeof(pw), "  - 비밀번호", true))
+            if (!get_validated_input(pw, sizeof(pw), "  - 비밀번호", true, false))
                 continue;
 
             snprintf(request, sizeof(request), "LOGIN:%s:%s", id, pw);
             if (communicate_with_server(sock, request, reply) && strncmp(reply, "OK", 2) == 0)
             {
                 printf("[클라이언트] %s\n", reply + 3); // "OK:" 다음부터 출력
-                // TODO: 로그인 성공 시 메모 관리 메뉴로 전환
-                printf("메모 관리 기능은 아직 구현되지 않았습니다. 로그아웃합니다.\n");
+                Sleep(500);
+                main_menu_loop(sock, id); // 'memo_menu_loop'에서 변경
             }
             else
             {
@@ -96,11 +100,11 @@ void user_menu_loop(SOCKET sock)
             break;
 
         case 2: // 회원가입
-            if (!get_escapable_input(id, sizeof(id), "  - 아이디", false))
+            if (!get_validated_input(id, sizeof(id), "  - 아이디", false, true))
                 continue;
-            if (!get_escapable_input(pw, sizeof(pw), "  - 비밀번호", true))
+            if (!get_validated_input(pw, sizeof(pw), "  - 비밀번호", true, false))
                 continue;
-            if (!get_escapable_input(pw2, sizeof(pw2), "  - 비밀번호 확인", true))
+            if (!get_validated_input(pw2, sizeof(pw2), "  - 비밀번호 확인", true, false))
                 continue;
 
             if (strcmp(pw, pw2) != 0)
