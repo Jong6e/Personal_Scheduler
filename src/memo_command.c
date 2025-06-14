@@ -42,6 +42,33 @@ void handle_memo_command(const char *request, char *reply, int reply_size)
             snprintf(reply, reply_size, "FAIL:메모 목록을 불러오는 데 실패했습니다.");
         }
     }
+    // MEMO_LIST_BY_MONTH
+    else if (strcmp(command, "MEMO_LIST_BY_MONTH") == 0)
+    {
+        char *year_str = strtok(NULL, DELIMITER);
+        char *month_str = strtok(NULL, DELIMITER);
+        if (year_str && month_str)
+        {
+            int year = atoi(year_str);
+            int month = atoi(month_str);
+            if (list_memos_by_month(user_id, year, month, reply, reply_size))
+            {
+                // 응답이 비어있으면(결과 없음), 클라이언트가 멈추지 않도록 "OK"를 보내줌
+                if (reply[0] == '\0')
+                {
+                    strcpy(reply, "OK");
+                }
+            }
+            else
+            {
+                snprintf(reply, reply_size, "FAIL:월별 메모 목록을 불러오는 데 실패했습니다.");
+            }
+        }
+        else
+        {
+            snprintf(reply, reply_size, "FAIL:연도와 월 정보가 필요합니다.");
+        }
+    }
     // MEMO_ADD
     else if (strcmp(command, "MEMO_ADD") == 0)
     {

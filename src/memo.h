@@ -5,8 +5,9 @@
 
 #include <stdbool.h>
 
+#define MAX_MEMOS 100        // 한 번에 캐싱하거나 처리할 최대 메모 수
 #define USER_ID_MAX 32       // 사용자 ID 최대 길이
-#define MEMO_TITLE_MAX 40    // 제목 최대 길이 (본문 앞 10글자 + ... 고려)
+#define MEMO_TITLE_MAX 40    // 제목 최대 길이
 #define MEMO_CONTENT_MAX 500 // 본문 최대 길이
 #define DATETIME_MAX 20      // "YYYY-MM-DD HH:MM:SS" 형식
 
@@ -37,5 +38,8 @@ bool delete_memo_for_user(const char *user_id, int memo_id);
 
 // 특정 메모의 원본 내용을 가져옵니다. (수정용)
 bool get_raw_memo_content(const char *user_id, int memo_id, char *content_output, int content_size);
+
+// 특정 연월의 메모 목록을 가져옵니다.
+bool list_memos_by_month(const char *user_id, int year, int month, char *output, int output_size);
 
 #endif // MEMO_H

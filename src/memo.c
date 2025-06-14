@@ -24,24 +24,6 @@ static void get_current_datetime(char *datetime_str)
     strftime(datetime_str, DATETIME_MAX, "%Y-%m-%d %H:%M:%S", t);
 }
 
-// 메모 내용에서 제목을 추출합니다. (앞 10글자 + "...")
-static void generate_title_from_content(const char *content, char *title)
-{
-    strncpy(title, content, 10);
-    if (strlen(content) > 10)
-    {
-        strcpy(title + 10, "...");
-    }
-    else
-    {
-        title[strlen(content)] = '\0';
-    }
-    // 제목에 포함될 수 있는 개행문자 제거
-    char *p = strchr(title, '\n');
-    if (p)
-        *p = '\0';
-}
-
 // 파일에서 다음 메모 ID를 결정합니다.
 static int get_next_memo_id(const char *filepath)
 {
@@ -109,11 +91,11 @@ bool get_memo_by_id(const char *user_id, int memo_id, char *output, int output_s
     FILE *file = fopen(filepath, "r");
     if (!file)
     {
-        snprintf(output, output_size, "메모를 찾을 수 없습니다.");
+        snprintf(output, output_size, "FAIL:사용자의 메모 파일을 찾을 수 없습니다.");
         return false;
     }
 
-    char line[sizeof(Memo)];
+    char line[sizeof(Memo) + 100];
     bool found = false;
     while (fgets(line, sizeof(line), file))
     {
@@ -121,56 +103,50 @@ bool get_memo_by_id(const char *user_id, int memo_id, char *output, int output_s
         sscanf(line, "%d", &id);
         if (id == memo_id)
         {
-            char title[MEMO_TITLE_MAX], content[MEMO_CONTENT_MAX], created_at[DATETIME_MAX], updated_at[DATETIME_MAX];
-            // 형식: id \t created_at \t updated_at \t title \t content
+            // OK:id\tcreated_at\tupdated_at\ttitle\tcontent 형식으로 전체 데이터 반환
+            char created_at[DATETIME_MAX], updated_at[DATETIME_MAX], title[MEMO_TITLE_MAX], content[MEMO_CONTENT_MAX];
             sscanf(line, "%d\t%[^\t]\t%[^\t]\t%[^\t]\t%[^\n]", &id, created_at, updated_at, title, content);
-            snprintf(output, output_size,
-                     "ID: %d\n"
-                     "제목: %s\n"
-                     "작성일: %s\n"
-                     "수정일: %s\n"
-                     "---------------------------------\n"
-                     "%s\n",
-                     id, title, created_at, updated_at, content);
+            snprintf(output, output_size, "OK:%d\t%s\t%s\t%s\t%s", id, created_at, updated_at, title, content);
             found = true;
             break;
         }
     }
+
     fclose(file);
+
     if (!found)
     {
-        snprintf(output, output_size, "메모 ID %d를 찾을 수 없습니다.", memo_id);
+        snprintf(output, output_size, "FAIL:메모 ID %d를 찾을 수 없습니다.", memo_id);
     }
     return found;
 }
 
 bool add_memo_for_user(const char *user_id, const char *title, const char *content)
 {
+    if (strlen(content) == 0)
+    {
+        return false; // 내용은 비워둘 수 없음
+    }
+
+    Memo new_memo;
     char filepath[MAX_MEMO_FILE_PATH];
     get_memo_filepath(user_id, filepath);
+    new_memo.id = get_next_memo_id(filepath);
+
+    // 클라이언트에서 받은 제목을 그대로 사용
+    strncpy(new_memo.title, title, MEMO_TITLE_MAX - 1);
+    new_memo.title[MEMO_TITLE_MAX - 1] = '\0';
+
+    strncpy(new_memo.content, content, MEMO_CONTENT_MAX - 1);
+    new_memo.content[MEMO_CONTENT_MAX - 1] = '\0';
+
+    time_t t = time(NULL);
+    get_current_datetime(new_memo.created_at);
+    strcpy(new_memo.updated_at, new_memo.created_at);
 
     FILE *file = fopen(filepath, "a");
     if (!file)
         return false;
-
-    Memo new_memo;
-    new_memo.id = get_next_memo_id(filepath);
-
-    // 제목 처리: title이 제공되고 비어있지 않으면 사용, 아니면 content에서 생성
-    if (title && strlen(title) > 0)
-    {
-        strncpy(new_memo.title, title, MEMO_TITLE_MAX - 1);
-        new_memo.title[MEMO_TITLE_MAX - 1] = '\0';
-    }
-    else
-    {
-        generate_title_from_content(content, new_memo.title);
-    }
-
-    strncpy(new_memo.content, content, MEMO_CONTENT_MAX - 1);
-    new_memo.content[MEMO_CONTENT_MAX - 1] = '\0';
-    get_current_datetime(new_memo.created_at);
-    strcpy(new_memo.updated_at, new_memo.created_at);
 
     // 형식: id \t created_at \t updated_at \t title \t content
     fprintf(file, "%d\t%s\t%s\t%s\t%s\n",
@@ -208,12 +184,17 @@ bool update_memo_for_user(const char *user_id, int memo_id, const char *new_cont
         {
             Memo m;
             m.id = id;
-            generate_title_from_content(new_content, m.title);
+
+            // 원본 줄에서 제목과 생성일자를 읽어와 보존하고, 제목 자동 생성을 비활성화
+            char old_title[MEMO_TITLE_MAX];
+            sscanf(line, "%*d\t%[^\t]\t%*[^\t]\t%[^\t]", m.created_at, old_title);
+
+            strncpy(m.title, old_title, MEMO_TITLE_MAX - 1);
+            m.title[MEMO_TITLE_MAX - 1] = '\0';
+
             strncpy(m.content, new_content, MEMO_CONTENT_MAX - 1);
             m.content[MEMO_CONTENT_MAX - 1] = '\0';
 
-            // 형식: id \t created_at \t ... -> created_at은 두 번째 필드
-            sscanf(line, "%*d\t%[^\t]", m.created_at);
             get_current_datetime(m.updated_at);
 
             // 형식: id \t created_at \t updated_at \t title \t content
@@ -316,4 +297,61 @@ bool get_raw_memo_content(const char *user_id, int memo_id, char *content_output
     }
     fclose(file);
     return found;
+}
+
+// 특정 연월의 메모 목록을 가져옵니다.
+bool list_memos_by_month(const char *user_id, int year, int month, char *output, int output_size)
+{
+    char filepath[MAX_MEMO_FILE_PATH];
+    get_memo_filepath(user_id, filepath);
+    FILE *file = fopen(filepath, "r");
+    if (!file)
+    {
+        output[0] = '\0'; // 파일이 없으면 빈 문자열 반환
+        return true;
+    }
+
+    int offset = 0;
+    char line[sizeof(Memo) + 100]; // 버퍼 여유 공간 추가
+    bool found = false;
+
+    output[0] = '\0'; // 출력 버퍼 초기화
+
+    while (fgets(line, sizeof(line), file))
+    {
+        int memo_year, memo_month;
+        // sscanf가 2개의 값을 성공적으로 읽었는지 확인
+        if (sscanf(line, "%*d\t%d-%d", &memo_year, &memo_month) == 2)
+        {
+            if (memo_year == year && memo_month == month)
+            {
+                // sscanf로 인한 멀티바이트 문자 깨짐 방지
+                // 라인 전체를 그대로 클라이언트에 전송하여 파싱을 클라이언트에 위임
+                // content 필드는 매우 클 수 있으므로, 제목까지만 잘라서 보냄
+
+                char *p_content = strstr(line, "\t"); // id
+                if (p_content)
+                    p_content = strstr(p_content + 1, "\t"); // created_at
+                if (p_content)
+                    p_content = strstr(p_content + 1, "\t"); // updated_at
+                if (p_content)
+                    p_content = strstr(p_content + 1, "\t"); // title
+
+                if (p_content)
+                {
+                    int len_to_send = (p_content - line);
+                    if (offset + len_to_send + 1 < output_size)
+                    {
+                        strncat(output + offset, line, len_to_send);
+                        strcat(output, "\n");
+                        offset += len_to_send + 1;
+                        found = true;
+                    }
+                }
+            }
+        }
+    }
+
+    fclose(file);
+    return true; // 데이터를 찾았든 못찾았든 연산 자체는 성공
 }

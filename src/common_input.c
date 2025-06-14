@@ -40,9 +40,12 @@ bool get_validated_input(char *buffer, int buffer_size, const char *prompt, bool
         }
         else if (ch == '\r' || ch == '\n') // Enter 키
         {
-            buffer[i] = '\0';
-            printf("\n");
-            break;
+            if (i > 0)
+            {
+                buffer[i] = '\0';
+                printf("\n");
+                break;
+            }
         }
         else if (ch == '\b') // Backspace 키
         {
@@ -72,20 +75,44 @@ bool get_validated_input(char *buffer, int buffer_size, const char *prompt, bool
     return true;
 }
 
-void get_line_input(char *buffer, int buffer_size, const char *prompt)
+// get_line_input 함수를 _getch 기반으로 변경하여 ESC 취소 기능 추가
+bool get_line_input(char *buffer, int buffer_size, const char *prompt)
 {
     printf("%s: ", prompt);
-    // 이전의 _getch() 호출로 인해 입력 버퍼에 남아있을 수 있는 문자를 비움
-    fflush(stdin);
+    int i = 0;
+    char ch;
+    buffer[0] = '\0'; // 버퍼 초기화
 
-    if (fgets(buffer, buffer_size, stdin) != NULL)
+    while (true)
     {
-        // fgets로 읽은 문자열 끝의 개행 문자(\n) 제거
-        buffer[strcspn(buffer, "\r\n")] = 0;
+        ch = _getch();
+
+        if (ch == 27) // ESC 키
+        {
+            printf("\n[입력 취소]\n");
+            Sleep(500);
+            return false;
+        }
+        else if (ch == '\r' || ch == '\n') // Enter 키
+        {
+            buffer[i] = '\0';
+            printf("\n");
+            break;
+        }
+        else if (ch == '\b') // Backspace 키
+        {
+            if (i > 0)
+            {
+                i--;
+                printf("\b \b");
+            }
+        }
+        else if (i < buffer_size - 1)
+        {
+            // 한글 등 멀티바이트 문자도 입력 가능하도록 별도 필터링 없음
+            buffer[i++] = ch;
+            printf("%c", ch);
+        }
     }
-    else
-    {
-        // 입력 스트림에 오류가 발생한 경우 버퍼를 비움
-        buffer[0] = '\0';
-    }
+    return true;
 }

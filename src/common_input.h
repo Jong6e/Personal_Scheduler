@@ -14,8 +14,8 @@ void clear_screen();
 // alphanumeric_only: true이면 영문/숫자만 입력을 허용합니다.
 bool get_validated_input(char *buffer, int buffer_size, const char *prompt, bool is_password, bool alphanumeric_only);
 
-// 한글을 포함한 자유로운 텍스트 한 줄을 입력받는 함수입니다.
-// (fgets 기반이므로 ESC 실시간 취소는 지원하지 않습니다)
-void get_line_input(char *buffer, int buffer_size, const char *prompt);
+// 사용자로부터 한 줄을 입력받습니다. (ESC로 취소 가능)
+// 반환 타입을 bool로 변경하여 입력 성공/취소 여부를 알림
+bool get_line_input(char *buffer, int buffer_size, const char *prompt);
 
 #endif // COMMON_INPUT_H
