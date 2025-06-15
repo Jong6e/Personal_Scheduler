@@ -42,4 +42,10 @@ bool get_raw_memo_content(const char *user_id, int memo_id, char *content_output
 // 특정 연월의 메모 목록을 가져옵니다.
 bool list_memos_by_month(const char *user_id, int year, int month, char *output, int output_size);
 
+// 파일에서 모든 메모를 로드합니다. (서버 시작 시 호출)
+void load_memos_from_file(void);
+
+// 메모리에서 모든 메모를 해제합니다. (서버 종료 시 호출)
+void free_all_memos(void);
+
 #endif // MEMO_H

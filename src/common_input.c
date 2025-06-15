@@ -20,25 +20,33 @@ void clear_screen()
 #endif
 }
 
-// 사용자로부터 입력을 받되, ESC 키를 누르면 입력을 취소할 수 있습니다.
-// masked 옵션은 비밀번호처럼 입력 내용을 '*'로 가릴지 결정합니다.
-bool get_validated_input(char *buffer, int buffer_size, const char *prompt, bool is_password, bool alphanumeric_only)
+// get_line_input과 get_validated_input을 통합한 범용 입력 함수
+static bool get_input_core(char *buffer, int buffer_size, const char *prompt, bool is_password, bool alphanumeric_only)
 {
     printf("%s: ", prompt);
     int i = 0;
-    char ch;
+    int line_len = 0;
+    line_len += strlen(prompt) + 2;
+    buffer[0] = '\0';
 
     while (true)
     {
-        ch = _getch();
+        int ch = _getch();
 
-        if (ch == 27) // ESC 키
+        // 방향키 등 특수키 입력(0xE0으로 시작) 무시
+        if (ch == 0xE0)
+        {
+            _getch(); // 뒤따라오는 실제 키 코드 버림
+            continue;
+        }
+
+        if (ch == KEY_ESC)
         {
             printf("\n[입력 취소]\n");
             Sleep(500);
             return false;
         }
-        else if (ch == '\r' || ch == '\n') // Enter 키
+        else if (ch == KEY_ENTER)
         {
             if (i > 0)
             {
@@ -47,21 +55,40 @@ bool get_validated_input(char *buffer, int buffer_size, const char *prompt, bool
                 break;
             }
         }
-        else if (ch == '\b') // Backspace 키
+        else if (ch == KEY_BACKSPACE)
         {
             if (i > 0)
             {
-                i--;
-                printf("\b \b");
+                // 1. 버퍼에서 마지막 UTF-8 문자 삭제
+                int last_char_start_pos = i - 1;
+                while (last_char_start_pos > 0 && (buffer[last_char_start_pos] & 0xC0) == 0x80)
+                {
+                    last_char_start_pos--;
+                }
+                i = last_char_start_pos;
+                buffer[i] = '\0';
+
+                // 2. 화면을 다시 그림
+                printf("\r"); // 줄의 시작으로 이동
+                for (int k = 0; k < line_len; k++)
+                    printf(" "); // 이전 줄 내용 지우기
+                printf("\r");    // 다시 줄의 시작으로 이동
+
+                // 3. 프롬프트와 수정된 버퍼 내용 출력
+                printf("%s: %s", prompt, buffer);
+                line_len = strlen(prompt) + 2 + strlen(buffer);
             }
         }
         else if (i < buffer_size - 1)
         {
             if (alphanumeric_only && !isalnum((unsigned char)ch))
             {
-                continue; // 영문/숫자가 아니면 무시
+                continue;
             }
-            buffer[i++] = ch;
+
+            buffer[i++] = (char)ch;
+            buffer[i] = '\0';
+
             if (is_password)
             {
                 printf("*");
@@ -70,49 +97,21 @@ bool get_validated_input(char *buffer, int buffer_size, const char *prompt, bool
             {
                 printf("%c", ch);
             }
+            line_len++;
         }
     }
     return true;
 }
 
-// get_line_input 함수를 _getch 기반으로 변경하여 ESC 취소 기능 추가
+// ID/PW처럼 영문/숫자만 입력받는 함수
+bool get_validated_input(char *buffer, int buffer_size, const char *prompt, bool is_password, bool alphanumeric_only)
+{
+    return get_input_core(buffer, buffer_size, prompt, is_password, alphanumeric_only);
+}
+
+// 메모처럼 모든 문자를 입력받는 함수
 bool get_line_input(char *buffer, int buffer_size, const char *prompt)
 {
-    printf("%s: ", prompt);
-    int i = 0;
-    char ch;
-    buffer[0] = '\0'; // 버퍼 초기화
-
-    while (true)
-    {
-        ch = _getch();
-
-        if (ch == 27) // ESC 키
-        {
-            printf("\n[입력 취소]\n");
-            Sleep(500);
-            return false;
-        }
-        else if (ch == '\r' || ch == '\n') // Enter 키
-        {
-            buffer[i] = '\0';
-            printf("\n");
-            break;
-        }
-        else if (ch == '\b') // Backspace 키
-        {
-            if (i > 0)
-            {
-                i--;
-                printf("\b \b");
-            }
-        }
-        else if (i < buffer_size - 1)
-        {
-            // 한글 등 멀티바이트 문자도 입력 가능하도록 별도 필터링 없음
-            buffer[i++] = ch;
-            printf("%c", ch);
-        }
-    }
-    return true;
+    // is_password=false, alphanumeric_only=false
+    return get_input_core(buffer, buffer_size, prompt, false, false);
 }

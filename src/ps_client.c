@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <winsock2.h>
+#include <locale.h>
 #include "user_menu.h"
 
 #pragma comment(lib, "ws2_32.lib")
@@ -11,6 +12,7 @@
 
 int main()
 {
+    setlocale(LC_ALL, ".UTF8");
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
 
@@ -41,8 +43,6 @@ int main()
     // 모든 UI와 로직은 user_menu_loop가 담당
     user_menu_loop(sock);
 
-    // 이 코드는 user_menu_loop 내의 exit_program()이 호출되므로
-    // 정상적인 상황에서는 도달하지 않음
     closesocket(sock);
     WSACleanup();
     return 0;

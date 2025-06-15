@@ -6,6 +6,7 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <stdbool.h>
+#include <locale.h>
 #include "user.h"
 #include "user_command.h"
 #include "memo.h"
@@ -22,9 +23,11 @@ DWORD WINAPI handle_client(LPVOID client_socket);
 
 int main()
 {
+    setlocale(LC_ALL, ".UTF8");
     SetConsoleOutputCP(CP_UTF8);
 
     load_users_from_file();
+    load_memos_from_file();
 
     WSADATA wsa;
     if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
@@ -60,6 +63,7 @@ int main()
     }
 
     closesocket(serv_sock);
+    free_all_memos();
     WSACleanup();
     return 0;
 }

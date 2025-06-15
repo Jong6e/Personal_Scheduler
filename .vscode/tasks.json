@@ -24,7 +24,7 @@
         {
             "label": "Run Server",
             "type": "shell",
-            "command": "start cmd /k \"chcp 65001 && .\\bin\\ps_server.exe\"",
+            "command": "start \"PS Server\" /D \"%cd%\" cmd /k \"chcp 65001 && .\\bin\\ps_server.exe\"",
             "dependsOn": [
                 "Build Server"
             ]
@@ -32,7 +32,7 @@
         {
             "label": "Run Client",
             "type": "shell",
-            "command": "start cmd /k \"chcp 65001 && .\\bin\\ps_client.exe\"",
+            "command": "start \"PS Client\" /D \"%cd%\" cmd /k \"chcp 65001 && .\\bin\\ps_client.exe\"",
             "dependsOn": [
                 "Build Client"
             ]

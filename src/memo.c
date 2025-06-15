@@ -355,3 +355,14 @@ bool list_memos_by_month(const char *user_id, int year, int month, char *output,
     fclose(file);
     return true; // 데이터를 찾았든 못찾았든 연산 자체는 성공
 }
+
+// 서버 시작/종료 시 호출되는 함수 (링커 오류 해결용)
+void load_memos_from_file(void)
+{
+    return;
+}
+
+void free_all_memos(void)
+{
+    return;
+}
