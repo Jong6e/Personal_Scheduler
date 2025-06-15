@@ -18,4 +18,7 @@ bool get_validated_input(char *buffer, int buffer_size, const char *prompt, bool
 // 반환 타입을 bool로 변경하여 입력 성공/취소 여부를 알림
 bool get_line_input(char *buffer, int buffer_size, const char *prompt);
 
+// 단일 키 입력을 받아 유효성을 검사하는 메뉴 선택 전용 함수
+char get_single_choice_input(const char *prompt, const char *valid_choices);
+
 #endif // COMMON_INPUT_H

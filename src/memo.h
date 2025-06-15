@@ -42,6 +42,9 @@ bool get_raw_memo_content(const char *user_id, int memo_id, char *content_output
 // 특정 연월의 메모 목록을 가져옵니다.
 bool list_memos_by_month(const char *user_id, int year, int month, char *output, int output_size);
 
+// 필드(제목/내용/전체)와 키워드로 메모를 검색합니다.
+bool search_memos(const char *user_id, const char *field, const char *keyword, char *output, int output_size);
+
 // 파일에서 모든 메모를 로드합니다. (서버 시작 시 호출)
 void load_memos_from_file(void);
 

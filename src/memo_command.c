@@ -166,6 +166,23 @@ void handle_memo_command(const char *request, char *reply, int reply_size)
             snprintf(reply, reply_size, "FAIL:삭제할 메모 ID가 필요합니다.");
         }
     }
+    // MEMO_SEARCH
+    else if (strcmp(command, "MEMO_SEARCH") == 0)
+    {
+        char *field = strtok(NULL, DELIMITER);
+        char *keyword = strtok(NULL, ""); // field 다음의 모든 것을 keyword로
+        if (field && keyword)
+        {
+            if (!search_memos(user_id, field, keyword, reply, reply_size))
+            {
+                // 실패 메시지는 search_memos 함수 내부에서 생성됨
+            }
+        }
+        else
+        {
+            snprintf(reply, reply_size, "FAIL:검색 필드와 키워드가 필요합니다.");
+        }
+    }
     else
     {
         snprintf(reply, reply_size, "FAIL:알 수 없는 MEMO 명령입니다: %s", command);

@@ -3,12 +3,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <ctype.h>
 
 #define MAX_MEMO_FILE_PATH 100
 #define TEMP_MEMO_FILE "data/memos.tmp"
 #define DELIMITER " \t " // 탭과 공백을 구분자로 사용
-
-// --- 내부 헬퍼 함수 ---
 
 // 사용자 ID를 기반으로 메모 파일 경로를 생성합니다.
 static void get_memo_filepath(const char *user_id, char *filepath)
@@ -44,8 +43,6 @@ static int get_next_memo_id(const char *filepath)
     fclose(file);
     return max_id + 1;
 }
-
-// --- 공개 API 함수 ---
 
 bool list_memos_for_user(const char *user_id, char *output, int output_size)
 {
@@ -364,5 +361,105 @@ void load_memos_from_file(void)
 
 void free_all_memos(void)
 {
-    return;
+}
+
+// 문자열을 소문자로 변환하는 내부 유틸리티 함수
+// 검색 시 대소문자 구분 없는 비교를 위해 사용됩니다.
+static void to_lowercase(const char *src, char *dest, size_t dest_size)
+{
+    size_t i = 0;
+    for (i = 0; i < dest_size - 1 && src[i] != '\0'; i++)
+    {
+        dest[i] = tolower((unsigned char)src[i]);
+    }
+    dest[i] = '\0';
+}
+
+bool search_memos(const char *user_id, const char *field, const char *keyword, char *output, int output_size)
+{
+    if (!field || !keyword || keyword[0] == '\0')
+    {
+        snprintf(output, output_size, "FAIL:검색 필드와 키워드를 정확히 입력해주세요.");
+        return false;
+    }
+
+    char filepath[MAX_MEMO_FILE_PATH];
+    get_memo_filepath(user_id, filepath);
+    FILE *file = fopen(filepath, "r");
+    if (!file)
+    {
+        snprintf(output, output_size, ""); // 파일이 없으면 빈 결과를 반환 (오류 아님)
+        return true;
+    }
+
+    char lower_keyword[MEMO_CONTENT_MAX];
+    to_lowercase(keyword, lower_keyword, sizeof(lower_keyword));
+
+    output[0] = '\0';
+    int offset = 0;
+    char line[sizeof(Memo) + 200];
+    bool found = false;
+
+    while (fgets(line, sizeof(line), file))
+    {
+        int id;
+        char created_at[DATETIME_MAX], updated_at[DATETIME_MAX], title[MEMO_TITLE_MAX], content[MEMO_CONTENT_MAX];
+        // 파일의 각 줄을 파싱하여 모든 정보를 변수에 저장
+        sscanf(line, "%d\t%[^\t]\t%[^\t]\t%[^\t]\t%[^\n]", &id, created_at, updated_at, title, content);
+
+        bool match = false;
+        char lower_target[MEMO_CONTENT_MAX];
+
+        if (strcmp(field, "title") == 0)
+        {
+            to_lowercase(title, lower_target, sizeof(lower_target));
+            if (strstr(lower_target, lower_keyword))
+            {
+                match = true;
+            }
+        }
+        else if (strcmp(field, "content") == 0)
+        {
+            to_lowercase(content, lower_target, sizeof(lower_target));
+            if (strstr(lower_target, lower_keyword))
+            {
+                match = true;
+            }
+        }
+        else if (strcmp(field, "all") == 0)
+        {
+            to_lowercase(title, lower_target, sizeof(lower_target));
+            if (strstr(lower_target, lower_keyword))
+            {
+                match = true;
+            }
+            else
+            {
+                to_lowercase(content, lower_target, sizeof(lower_target));
+                if (strstr(lower_target, lower_keyword))
+                {
+                    match = true;
+                }
+            }
+        }
+
+        if (match)
+        {
+            // 클라이언트에서 파싱하기 용이한 포맷으로 결과 문자열 추가
+            offset += snprintf(output + offset, output_size - offset,
+                               "%d\t%s\t%s\t%s\n",
+                               id, created_at, updated_at, title);
+            found = true;
+        }
+    }
+
+    fclose(file);
+
+    if (!found)
+    {
+        // 검색 결과가 없는 경우, 클라이언트가 알 수 있도록 특정 메시지 대신 빈 문자열을 보냄
+        snprintf(output, output_size, "");
+    }
+
+    return true;
 }

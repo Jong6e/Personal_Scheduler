@@ -115,3 +115,29 @@ bool get_line_input(char *buffer, int buffer_size, const char *prompt)
     // is_password=false, alphanumeric_only=false
     return get_input_core(buffer, buffer_size, prompt, false, false);
 }
+
+// 단일 키 입력을 받아 유효성을 검사하는 메뉴 선택 전용 함수
+char get_single_choice_input(const char *prompt, const char *valid_choices)
+{
+    printf("%s: ", prompt);
+
+    while (true)
+    {
+        int ch = _getch();
+
+        if (ch == KEY_ESC)
+        {
+            printf("\n[입력 취소]\n");
+            Sleep(500);
+            return KEY_ESC; // ESC 키 자체를 반환하여 취소 상태 알림
+        }
+
+        // 입력된 키가 유효한 선택지 목록에 있는지 확인
+        if (valid_choices != NULL && strchr(valid_choices, ch) != NULL)
+        {
+            printf("%c\n", ch); // 선택된 키를 화면에 보여주고 줄바꿈
+            return (char)ch;
+        }
+        // 그 외의 모든 키(백스페이스, 다른 문자 등)는 무시
+    }
+}
