@@ -5,50 +5,50 @@
 
 #include <stdbool.h>
 
-#define MAX_MEMOS 100        // 한 번에 캐싱하거나 처리할 최대 메모 수
-#define USER_ID_MAX 32       // 사용자 ID 최대 길이
-#define MEMO_TITLE_MAX 40    // 제목 최대 길이
-#define MEMO_CONTENT_MAX 500 // 본문 최대 길이
-#define DATETIME_MAX 20      // "YYYY-MM-DD HH:MM:SS" 형식
+#define MAX_USER_ID_LEN 50
+#define MAX_MEMO_TITLE_LEN 100
+#define MAX_MEMO_CONTENT_LEN 1024
+#define MAX_DATETIME_LEN 20
 
-// 메모 정보를 담는 구조체 (R011)
+// 메모 정보를 담는 구조체
 typedef struct
 {
-    int id;
-    char title[MEMO_TITLE_MAX];
-    char content[MEMO_CONTENT_MAX];
-    char created_at[DATETIME_MAX];
-    char updated_at[DATETIME_MAX];
+    int id;                        // 각 메모의 고유 ID (전체 메모에서 고유)
+    char user_id[MAX_USER_ID_LEN]; // 이 메모를 소유한 사용자 ID
+    char title[MAX_MEMO_TITLE_LEN];
+    char content[MAX_MEMO_CONTENT_LEN];
+    char created_at[MAX_DATETIME_LEN];
+    char updated_at[MAX_DATETIME_LEN];
 } Memo;
 
-// 특정 사용자의 모든 메모 목록을 문자열 형태로 가져옵니다.
-bool list_memos_for_user(const char *user_id, char *output, int output_size);
+// 메모를 연결 리스트로 관리하기 위한 노드 구조체
+typedef struct MemoNode
+{
+    Memo memo;
+    struct MemoNode *next;
+} MemoNode;
 
-// 특정 사용자의 단일 메모를 상세 조회합니다.
-bool get_memo_by_id(const char *user_id, int memo_id, char *output, int output_size);
-
-// 신규 메모를 추가합니다.
-bool add_memo_for_user(const char *user_id, const char *title, const char *content);
-
-// 특정 메모를 수정합니다.
-bool update_memo_for_user(const char *user_id, int memo_id, const char *new_content);
-
-// 특정 메모를 삭제합니다.
-bool delete_memo_for_user(const char *user_id, int memo_id);
-
-// 특정 메모의 원본 내용을 가져옵니다. (수정용)
-bool get_raw_memo_content(const char *user_id, int memo_id, char *content_output, int content_size);
-
-// 특정 연월의 메모 목록을 가져옵니다.
-bool list_memos_by_month(const char *user_id, int year, int month, char *output, int output_size);
-
-// 필드(제목/내용/전체)와 키워드로 메모를 검색합니다.
-bool search_memos(const char *user_id, const char *field, const char *keyword, char *output, int output_size);
-
-// 파일에서 모든 메모를 로드합니다. (서버 시작 시 호출)
-void load_memos_from_file(void);
-
-// 메모리에서 모든 메모를 해제합니다. (서버 종료 시 호출)
-void free_all_memos(void);
+// 메모 초기화
+void memo_init();
+// 메모 정리
+void memo_cleanup();
+// 사용자별 메모 목록 출력
+bool memo_list_for_user(const char *user_id, char *output, int output_size);
+// 메모 조회
+bool memo_get_by_id(int memo_id, const char *user_id, char *output, int output_size);
+// 메모 추가
+bool memo_add(const char *user_id, const char *title, const char *content);
+// 메모 수정
+bool memo_update(int memo_id, const char *user_id, const char *new_content);
+// 메모 삭제
+bool memo_delete(int memo_id, const char *user_id);
+// 회원 탈퇴 시, 해당 사용자의 모든 메모 데이터를 삭제
+bool memo_delete_by_user_id(const char *user_id);
+// 월별 메모 목록 출력
+bool memo_list_by_month(const char *user_id, int year, int month, char *output, int output_size);
+// 메모 검색
+bool memo_search(const char *user_id, const char *field, const char *keyword, char *output, int output_size);
+// 모든 메모를 파일에 저장
+void memo_save_all_to_files();
 
 #endif // MEMO_H

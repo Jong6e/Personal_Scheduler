@@ -9,40 +9,41 @@
 
 #define DELIMITER ":"
 
-// 클라이언트로부터 받은 메모 관련 명령을 처리하고 응답 문자열을 생성합니다.
+// 클라이언트로부터 받은 메모 관련 명령을 처리하고 응답 문자열을 생성
 void handle_memo_command(const char *request, char *reply, int reply_size)
 {
-    char request_copy[1024];
-    strncpy(request_copy, request, sizeof(request_copy) - 1);
-    request_copy[sizeof(request_copy) - 1] = '\0';
-
+    // strdup를 사용하여 원본 요청 문자열을 복사
+    char *request_copy = strdup(request);
+    if (request_copy == NULL)
+    {
+        snprintf(reply, reply_size, "FAIL:메모리 할당 오류");
+        return;
+    }
+    // 명령어 파싱
     char *command = strtok(request_copy, DELIMITER);
     if (!command)
     {
         snprintf(reply, reply_size, "FAIL:잘못된 요청입니다.");
+        free(request_copy);
         return;
     }
-
+    // 사용자 ID 파싱
     char *user_id = strtok(NULL, DELIMITER);
     if (!user_id)
     {
         snprintf(reply, reply_size, "FAIL:사용자 ID가 필요합니다.");
+        free(request_copy);
         return;
     }
-
-    // MEMO_LIST
+    // 메모 목록 조회
     if (strcmp(command, "MEMO_LIST") == 0)
     {
-        if (list_memos_for_user(user_id, reply, reply_size))
-        {
-            // list_memos_for_user가 직접 응답 문자열(헤더 포함)을 생성
-        }
-        else
+        if (!memo_list_for_user(user_id, reply, reply_size))
         {
             snprintf(reply, reply_size, "FAIL:메모 목록을 불러오는 데 실패했습니다.");
         }
     }
-    // MEMO_LIST_BY_MONTH
+    // 메모 목록 조회 (월별)
     else if (strcmp(command, "MEMO_LIST_BY_MONTH") == 0)
     {
         char *year_str = strtok(NULL, DELIMITER);
@@ -51,17 +52,9 @@ void handle_memo_command(const char *request, char *reply, int reply_size)
         {
             int year = atoi(year_str);
             int month = atoi(month_str);
-            if (list_memos_by_month(user_id, year, month, reply, reply_size))
+            if (!memo_list_by_month(user_id, year, month, reply, reply_size))
             {
-                // 응답이 비어있으면(결과 없음), 클라이언트가 멈추지 않도록 "OK"를 보내줌
-                if (reply[0] == '\0')
-                {
-                    strcpy(reply, "OK");
-                }
-            }
-            else
-            {
-                snprintf(reply, reply_size, "FAIL:월별 메모 목록을 불러오는 데 실패했습니다.");
+                // 실패 메시지는 함수 내에서 생성됨
             }
         }
         else
@@ -69,31 +62,38 @@ void handle_memo_command(const char *request, char *reply, int reply_size)
             snprintf(reply, reply_size, "FAIL:연도와 월 정보가 필요합니다.");
         }
     }
-    // MEMO_ADD
+    // 메모 추가
     else if (strcmp(command, "MEMO_ADD") == 0)
     {
         char *title = strtok(NULL, DELIMITER);
-        char *content = strtok(NULL, ""); // title 다음의 모든 것을 content로
-
-        if (user_id && title != NULL && content != NULL && add_memo_for_user(user_id, title, content))
+        if (title)
         {
-            snprintf(reply, reply_size, "OK:메모가 성공적으로 추가되었습니다.");
+            char *content = title + strlen(title) + 1;
+            if (*content && memo_add(user_id, title, content))
+            {
+                memo_save_all_to_files(); // 변경사항 즉시 저장
+                snprintf(reply, reply_size, "OK:메모가 성공적으로 추가되었습니다.");
+            }
+            else
+            {
+                snprintf(reply, reply_size, "FAIL:메모 추가에 실패했습니다. (내용 누락 등)");
+            }
         }
         else
         {
-            snprintf(reply, reply_size, "FAIL:메모 추가에 실패했습니다.");
+            snprintf(reply, reply_size, "FAIL:메모 제목이 필요합니다.");
         }
     }
-    // MEMO_VIEW
+    // 메모 상세 조회
     else if (strcmp(command, "MEMO_VIEW") == 0)
     {
         char *memo_id_str = strtok(NULL, DELIMITER);
         if (memo_id_str)
         {
             int memo_id = atoi(memo_id_str);
-            if (!get_memo_by_id(user_id, memo_id, reply, reply_size))
+            if (!memo_get_by_id(memo_id, user_id, reply, reply_size))
             {
-                // 실패 메시지는 get_memo_by_id에서 생성
+                // 실패 메시지는 함수에서 생성
             }
         }
         else
@@ -101,59 +101,39 @@ void handle_memo_command(const char *request, char *reply, int reply_size)
             snprintf(reply, reply_size, "FAIL:조회할 메모 ID가 필요합니다.");
         }
     }
-    // MEMO_GET_CONTENT (수정용)
-    else if (strcmp(command, "MEMO_GET_CONTENT") == 0)
+    // 메모 수정
+    else if (strcmp(command, "MEMO_UPDATE") == 0)
     {
         char *memo_id_str = strtok(NULL, DELIMITER);
         if (memo_id_str)
         {
+            char *content = memo_id_str + strlen(memo_id_str) + 1;
             int memo_id = atoi(memo_id_str);
-            char content[MEMO_CONTENT_MAX];
-            if (get_raw_memo_content(user_id, memo_id, content, sizeof(content)))
+            if (*content && memo_update(memo_id, user_id, content))
             {
-                snprintf(reply, reply_size, "OK:%s", content);
-            }
-            else
-            {
-                snprintf(reply, reply_size, "FAIL:메모 내용을 가져오는 데 실패했습니다.");
-            }
-        }
-        else
-        {
-            snprintf(reply, reply_size, "FAIL:가져올 메모 ID가 필요합니다.");
-        }
-    }
-    // MEMO_UPDATE
-    else if (strcmp(command, "MEMO_UPDATE") == 0)
-    {
-        char *memo_id_str = strtok(NULL, DELIMITER);
-        char *content = strtok(NULL, "");
-        if (memo_id_str && content)
-        {
-            int memo_id = atoi(memo_id_str);
-            if (update_memo_for_user(user_id, memo_id, content))
-            {
+                memo_save_all_to_files(); // 변경사항 즉시 저장
                 snprintf(reply, reply_size, "OK:메모가 성공적으로 수정되었습니다.");
             }
             else
             {
-                snprintf(reply, reply_size, "FAIL:메모 수정에 실패했습니다 (ID 불일치 등).");
+                snprintf(reply, reply_size, "FAIL:메모 수정에 실패했습니다. (내용 누락 등)");
             }
         }
         else
         {
-            snprintf(reply, reply_size, "FAIL:수정할 메모 ID와 내용이 필요합니다.");
+            snprintf(reply, reply_size, "FAIL:수정할 메모 ID가 필요합니다.");
         }
     }
-    // MEMO_DELETE
+    // 메모 삭제
     else if (strcmp(command, "MEMO_DELETE") == 0)
     {
         char *memo_id_str = strtok(NULL, DELIMITER);
         if (memo_id_str)
         {
             int memo_id = atoi(memo_id_str);
-            if (delete_memo_for_user(user_id, memo_id))
+            if (memo_delete(memo_id, user_id))
             {
+                memo_save_all_to_files();
                 snprintf(reply, reply_size, "OK:메모가 성공적으로 삭제되었습니다.");
             }
             else
@@ -166,25 +146,31 @@ void handle_memo_command(const char *request, char *reply, int reply_size)
             snprintf(reply, reply_size, "FAIL:삭제할 메모 ID가 필요합니다.");
         }
     }
-    // MEMO_SEARCH
+    // 메모 검색
     else if (strcmp(command, "MEMO_SEARCH") == 0)
     {
         char *field = strtok(NULL, DELIMITER);
-        char *keyword = strtok(NULL, ""); // field 다음의 모든 것을 keyword로
-        if (field && keyword)
+        if (field)
         {
-            if (!search_memos(user_id, field, keyword, reply, reply_size))
+            char *keyword = field + strlen(field) + 1;
+            if (*keyword && !memo_search(user_id, field, keyword, reply, reply_size))
             {
-                // 실패 메시지는 search_memos 함수 내부에서 생성됨
+                // 실패 메시지는 함수 내부에서 생성됨
+            }
+            else if (!*keyword)
+            {
+                snprintf(reply, reply_size, "FAIL:검색어가 필요합니다.");
             }
         }
         else
         {
-            snprintf(reply, reply_size, "FAIL:검색 필드와 키워드가 필요합니다.");
+            snprintf(reply, reply_size, "FAIL:검색 필드가 필요합니다.");
         }
     }
+    // 알 수 없는 명령어
     else
     {
         snprintf(reply, reply_size, "FAIL:알 수 없는 MEMO 명령입니다: %s", command);
     }
+    free(request_copy);
 }

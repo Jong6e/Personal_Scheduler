@@ -1,3 +1,5 @@
+// src/user_menu.c
+
 #include "user_menu.h"
 #include "common_input.h"
 #include "user.h"      // USER_ID_MAX, USER_PW_MAX
@@ -9,17 +11,18 @@
 #include <windows.h> // Sleep
 #include <conio.h>   // getch 함수 사용을 위해 추가
 
-#define BUF_SIZE 1024
+#define BUF_SIZE 2048
 
 // 서버에 요청을 보내고 응답을 받아 출력하는 헬퍼 함수
 static bool communicate_with_server(SOCKET sock, const char *request, char *reply)
 {
+    // 요청 전송
     if (send(sock, request, strlen(request), 0) < 0)
     {
         printf("[클라이언트] 서버에 요청 전송 실패\n");
         return false;
     }
-
+    // 응답 수신
     int bytes = recv(sock, reply, BUF_SIZE - 1, 0);
     if (bytes <= 0)
     {
@@ -46,8 +49,8 @@ void exit_program(SOCKET sock)
 // 로그인 이전 사용자를 위한 메뉴입니다. (로그인, 회원가입, 종료)
 void user_menu_loop(SOCKET sock)
 {
-    char option[10];
-    char id[USER_ID_MAX], pw[USER_PW_MAX], pw2[USER_PW_MAX];
+    char choice;
+    char id[MAX_ID_LEN], pw[MAX_PW_LEN], pw2[MAX_PW_LEN];
     char request[BUF_SIZE], reply[BUF_SIZE];
 
     while (true)
@@ -62,28 +65,21 @@ void user_menu_loop(SOCKET sock)
         printf("  0. 종료\n");
         printf("======================================================\n");
 
-        if (!get_validated_input(option, sizeof(option), ">> 선택", false, false))
+        choice = get_single_choice_input(">> 선택", "120");
+
+        if (choice == KEY_ESC)
             continue;
-
-        int choice = atoi(option);
-
-        // 사용자가 "0"을 직접 입력한 경우가 아니면서 atoi의 결과가 0이면
-        // (예: "abc" 같은 문자열 입력) 잘못된 입력으로 처리합니다.
-        if (choice == 0 && strcmp(option, "0") != 0)
-        {
-            choice = -1; // switch문의 default로 보내기 위한 값
-        }
 
         switch (choice)
         {
-        case 0: // 종료
+        case '0': // 종료
             exit_program(sock);
             break;
 
-        case 1: // 로그인
-            if (!get_validated_input(id, sizeof(id), "  - 아이디", false, true))
+        case '1': // 로그인
+            if (!get_secure_input(id, sizeof(id), "  - 아이디", false, true))
                 continue;
-            if (!get_validated_input(pw, sizeof(pw), "  - 비밀번호", true, false))
+            if (!get_secure_input(pw, sizeof(pw), "  - 비밀번호", true, true))
                 continue;
 
             snprintf(request, sizeof(request), "LOGIN:%s:%s", id, pw);
@@ -91,7 +87,7 @@ void user_menu_loop(SOCKET sock)
             {
                 printf("[클라이언트] %s\n", reply + 3); // "OK:" 다음부터 출력
                 Sleep(500);
-                main_menu_loop(sock, id); // 'memo_menu_loop'에서 변경
+                main_menu_loop(sock, id);
             }
             else
             {
@@ -99,12 +95,12 @@ void user_menu_loop(SOCKET sock)
             }
             break;
 
-        case 2: // 회원가입
-            if (!get_validated_input(id, sizeof(id), "  - 아이디", false, true))
+        case '2': // 회원가입
+            if (!get_secure_input(id, sizeof(id), "  - 아이디", false, true))
                 continue;
-            if (!get_validated_input(pw, sizeof(pw), "  - 비밀번호", true, false))
+            if (!get_secure_input(pw, sizeof(pw), "  - 비밀번호", true, true))
                 continue;
-            if (!get_validated_input(pw2, sizeof(pw2), "  - 비밀번호 확인", true, false))
+            if (!get_secure_input(pw2, sizeof(pw2), "  - 비밀번호 확인", true, true))
                 continue;
 
             if (strcmp(pw, pw2) != 0)
@@ -126,7 +122,9 @@ void user_menu_loop(SOCKET sock)
             break;
 
         default:
-            printf("[클라이언트] 잘못된 선택입니다. (0-2)\n");
+            // get_single_choice_input에서 유효하지 않은 입력은 걸러주므로
+            // 이 케이스는 사실상 발생하지 않습니다.
+            printf("[클라이언트] 잘못된 선택입니다.\n");
             break;
         }
         printf("\n계속하려면 아무 키나 누르세요...");

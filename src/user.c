@@ -1,143 +1,188 @@
+// src/user.c
+
 #include "user.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
 
-// --- 전역 변수 정의 ---
-static User g_users[MAX_USERS];
-static int g_user_count = 0;
+// 연결 리스트의 헤드 포인터
+static UserNode *user_list_head = NULL;
+const char *USER_FILE_PATH = "data/users.txt";
 
-// ID로 사용자를 찾아 인덱스를 반환, 없으면 -1 반환
-static int find_user_by_id(const char *id)
+// 새로운 UserNode를 생성하고 초기화
+UserNode *create_user_node(const char *id, const char *pw)
 {
-    for (int i = 0; i < g_user_count; i++)
+    UserNode *newNode = (UserNode *)malloc(sizeof(UserNode));
+    if (newNode == NULL)
     {
-        if (strcmp(g_users[i].id, id) == 0)
+        perror("[에러] 사용자 노드 메모리 할당 실패");
+        return NULL;
+    }
+    strncpy(newNode->user.id, id, MAX_ID_LEN - 1);
+    newNode->user.id[MAX_ID_LEN - 1] = '\0';
+    strncpy(newNode->user.pw, pw, MAX_PW_LEN - 1);
+    newNode->user.pw[MAX_PW_LEN - 1] = '\0';
+    newNode->next = NULL;
+    return newNode;
+}
+
+// 파일에서 사용자 정보를 읽어와 연결 리스트를 초기화
+void user_init()
+{
+    FILE *file = fopen(USER_FILE_PATH, "r");
+    if (file == NULL)
+    {
+        printf("[정보] %s 파일이 없어 새로 시작합니다.\n", USER_FILE_PATH);
+        // 파일을 쓰기 모드로 열어 새로 생성
+        FILE *createFile = fopen(USER_FILE_PATH, "w");
+        if (createFile)
         {
-            return i;
+            fclose(createFile);
         }
-    }
-    return -1;
-}
-
-// 파일에서 모든 사용자 정보를 읽어와 g_users 배열에 로드
-void load_users_from_file()
-{
-    FILE *file = fopen(USER_FILE, "r");
-    if (!file)
-    {
-        printf("[서버] users.txt 파일이 없어 새로 시작합니다.\n");
         return;
     }
 
-    g_user_count = 0; // 배열 초기화
-    while (g_user_count < MAX_USERS &&
-           fscanf(file, "%31[^:]:%19[^\n]\n", g_users[g_user_count].id, g_users[g_user_count].pw) == 2)
+    char id[MAX_ID_LEN], pw[MAX_PW_LEN];
+    while (fscanf(file, "%49[^:]:%49[^\n]\n", id, pw) == 2)
     {
-        g_user_count++;
+        user_add(id, pw);
     }
+
     fclose(file);
-    printf("[서버] %d명의 사용자 정보를 로드했습니다.\n", g_user_count);
+    printf("[정보] 사용자 정보를 파일에서 로드했습니다.\n");
 }
 
-// g_users 배열의 모든 사용자 정보를 파일에 저장
-void save_users_to_file()
+// 연결 리스트의 모든 노드 메모리를 해제
+void user_cleanup()
 {
-    FILE *file = fopen(USER_FILE, "w");
-    if (!file)
+    UserNode *current = user_list_head;
+    UserNode *next_node;
+    while (current != NULL)
     {
-        perror("[서버] 사용자 파일 저장 실패");
-        return;
+        next_node = current->next;
+        free(current);
+        current = next_node;
     }
-    for (int i = 0; i < g_user_count; i++)
-    {
-        fprintf(file, "%s:%s\n", g_users[i].id, g_users[i].pw);
-    }
-    fclose(file);
+    user_list_head = NULL;
+    printf("[정보] 모든 사용자 정보 메모리를 해제했습니다.\n");
 }
 
-// 로그인 정보 확인
-bool check_login(const char *id, const char *pw)
+// ID로 사용자를 찾아 User 구조체 포인터를 반환
+User *user_find_by_id(const char *id)
 {
-    int user_idx = find_user_by_id(id);
-    if (user_idx != -1 && strcmp(g_users[user_idx].pw, pw) == 0)
+    UserNode *current = user_list_head;
+    while (current != NULL)
     {
-        return true;
+        if (strcmp(current->user.id, id) == 0)
+        {
+            return &(current->user);
+        }
+        current = current->next;
     }
-    return false;
+    return NULL;
 }
 
-// 신규 사용자 등록
-bool register_user(const char *id, const char *pw)
+// 새로운 사용자를 연결 리스트에 추가
+bool user_add(const char *id, const char *pw)
 {
-    if (g_user_count >= MAX_USERS || find_user_by_id(id) != -1)
+    // ID 중복 확인
+    if (user_find_by_id(id) != NULL)
     {
-        return false; // 사용자 수 초과 또는 ID 중복
-    }
-    strncpy(g_users[g_user_count].id, id, USER_ID_MAX - 1);
-    g_users[g_user_count].id[USER_ID_MAX - 1] = '\0';
-
-    strncpy(g_users[g_user_count].pw, pw, USER_PW_MAX - 1);
-    g_users[g_user_count].pw[USER_PW_MAX - 1] = '\0';
-
-    g_user_count++;
-    save_users_to_file();
-    return true;
-}
-
-// 사용자 삭제
-bool delete_user(const char *id)
-{
-    int user_idx = find_user_by_id(id);
-    if (user_idx == -1)
-    {
-        return false; // 사용자가 존재하지 않음
+        return false;
     }
 
-    // 연관된 메모 파일 삭제 (R002, R007)
-    char memo_filename[100];
-    sprintf(memo_filename, "data/%s_memos.txt", id);
-    if (remove(memo_filename) == 0)
+    UserNode *newNode = create_user_node(id, pw);
+    if (newNode == NULL)
     {
-        printf("[서버] %s 파일이 삭제되었습니다.\n", memo_filename);
+        return false;
+    }
+
+    // 리스트의 끝에 추가
+    if (user_list_head == NULL)
+    {
+        user_list_head = newNode;
     }
     else
     {
-        // 파일이 없거나 삭제할 수 없는 경우, 오류 메시지를 출력할 수 있지만 필수는 아님
-        printf("[서버] %s 파일을 찾을 수 없거나 삭제할 수 없습니다.\n", memo_filename);
+        UserNode *current = user_list_head;
+        while (current->next != NULL)
+        {
+            current = current->next;
+        }
+        current->next = newNode;
     }
 
-    // 배열의 뒷부분을 앞으로 한 칸씩 당겨서 덮어쓰기
-    for (int i = user_idx; i < g_user_count - 1; i++)
-    {
-        g_users[i] = g_users[i + 1];
-    }
-    g_user_count--;
-
-    save_users_to_file();
+    // 변경사항은 서버 종료 시점에 일괄 저장
     return true;
 }
 
-// 사용자 비밀번호 수정
-bool update_user_password(const char *id, const char *old_pw, const char *new_pw)
+// ID로 사용자를 찾아 연결 리스트에서 삭제
+bool user_delete_by_id(const char *id)
 {
-    // 1. 사용자가 존재하는지, 그리고 기존 비밀번호가 맞는지 확인
-    if (!check_login(id, old_pw))
+    UserNode *current = user_list_head;
+    UserNode *prev = NULL;
+
+    while (current != NULL && strcmp(current->user.id, id) != 0)
     {
-        return false; // 사용자가 없거나 기존 비밀번호가 틀림
+        prev = current;
+        current = current->next;
     }
 
-    // 2. 새 비밀번호로 교체
-    int user_idx = find_user_by_id(id);
-    if (user_idx == -1)
+    // 사용자를 찾지 못한 경우
+    if (current == NULL)
     {
-        return false; // 사용자가 존재하지 않음
+        return false;
     }
 
-    strncpy(g_users[user_idx].pw, new_pw, USER_PW_MAX - 1);
-    g_users[user_idx].pw[USER_PW_MAX - 1] = '\0';
+    // 찾은 노드를 리스트에서 제거
+    if (prev == NULL)
+    { // 첫 번째 노드인 경우
+        user_list_head = current->next;
+    }
+    else
+    {
+        prev->next = current->next;
+    }
+    free(current);
 
-    save_users_to_file();
+    // 변경사항은 서버 종료 시점에 일괄 저장
     return true;
 }
+
+// 사용자의 비밀번호를 변경
+bool user_update_password(const char *id, const char *new_pw)
+{
+    User *user = user_find_by_id(id);
+    if (user == NULL)
+    {
+        return false;
+    }
+    strncpy(user->pw, new_pw, MAX_PW_LEN - 1);
+    user->pw[MAX_PW_LEN - 1] = '\0';
+
+    // 변경사항은 서버 종료 시점에 일괄 저장
+    return true;
+}
+
+// 현재 연결 리스트의 모든 사용자 정보를 파일에 저장
+void user_save_to_file()
+{
+    FILE *file = fopen(USER_FILE_PATH, "w");
+    if (file == NULL)
+    {
+        perror("[에러] 사용자 파일 저장 실패");
+        return;
+    }
+
+    UserNode *current = user_list_head;
+    while (current != NULL)
+    {
+        fprintf(file, "%s:%s\n", current->user.id, current->user.pw);
+        current = current->next;
+    }
+
+    fclose(file);
+}
+
+// user_get_all 함수는 삭제됨

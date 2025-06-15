@@ -1,465 +1,481 @@
+// src/memo.c
+
 #include "memo.h"
+#include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <ctype.h>
 
-#define MAX_MEMO_FILE_PATH 100
-#define TEMP_MEMO_FILE "data/memos.tmp"
-#define DELIMITER " \t " // 탭과 공백을 구분자로 사용
+// 전역 변수
+static MemoNode *g_memo_list_head = NULL;
+static int g_next_memo_id = 1;
+const char *DATA_DIR = "data/";
 
-// 사용자 ID를 기반으로 메모 파일 경로를 생성합니다.
-static void get_memo_filepath(const char *user_id, char *filepath)
-{
-    snprintf(filepath, MAX_MEMO_FILE_PATH, "data/%s_memos.txt", user_id);
-}
-
-// 현재 시간을 "YYYY-MM-DD HH:MM:SS" 형식의 문자열로 가져옵니다.
-static void get_current_datetime(char *datetime_str)
+// 현재 날짜와 시간 가져오기
+static void get_current_datetime(char *datetime_str, int size)
 {
     time_t now = time(NULL);
     struct tm *t = localtime(&now);
-    strftime(datetime_str, DATETIME_MAX, "%Y-%m-%d %H:%M:%S", t);
+    strftime(datetime_str, size, "%Y-%m-%d %H:%M:%S", t);
 }
 
-// 파일에서 다음 메모 ID를 결정합니다.
-static int get_next_memo_id(const char *filepath)
+// 메모 노드 생성
+static MemoNode *create_memo_node(const Memo *memo_data)
 {
-    FILE *file = fopen(filepath, "r");
-    if (!file)
-        return 1;
-
-    int max_id = 0;
-    int id;
-    while (fscanf(file, "%d", &id) == 1)
+    MemoNode *new_node = (MemoNode *)malloc(sizeof(MemoNode));
+    if (!new_node)
     {
-        if (id > max_id)
-            max_id = id;
-        // 파일의 나머지 한 줄을 소비
-        char buffer[MEMO_CONTENT_MAX + 100];
-        fgets(buffer, sizeof(buffer), file);
+        perror("Failed to allocate memory for new memo node");
+        return NULL;
     }
-    fclose(file);
-    return max_id + 1;
+    new_node->memo = *memo_data;
+    new_node->next = NULL;
+    return new_node;
 }
 
-bool list_memos_for_user(const char *user_id, char *output, int output_size)
+// 메모 노드 추가
+static void append_memo_node(MemoNode *node_to_add)
 {
-    char filepath[MAX_MEMO_FILE_PATH];
-    get_memo_filepath(user_id, filepath);
-
-    FILE *file = fopen(filepath, "r");
-    if (!file)
+    if (!g_memo_list_head)
     {
-        snprintf(output, output_size, "작성된 메모가 없습니다.");
-        return true;
-    }
-
-    int offset = 0;
-    char line[sizeof(Memo)];
-    bool found = false;
-
-    offset += snprintf(output + offset, output_size - offset, "[%s님의 메모 목록]\n", user_id);
-
-    while (fgets(line, sizeof(line), file))
-    {
-        int id;
-        char title[MEMO_TITLE_MAX];
-        // 형식: id \t created_at \t updated_at \t title \t content
-        sscanf(line, "%d\t%*[^\t]\t%*[^\t]\t%[^\t]", &id, title);
-
-        offset += snprintf(output + offset, output_size - offset, "  - [%d] %s\n", id, title);
-        found = true;
-    }
-
-    fclose(file);
-    if (!found)
-    {
-        snprintf(output, output_size, "작성된 메모가 없습니다.");
-    }
-    return true;
-}
-
-bool get_memo_by_id(const char *user_id, int memo_id, char *output, int output_size)
-{
-    char filepath[MAX_MEMO_FILE_PATH];
-    get_memo_filepath(user_id, filepath);
-    FILE *file = fopen(filepath, "r");
-    if (!file)
-    {
-        snprintf(output, output_size, "FAIL:사용자의 메모 파일을 찾을 수 없습니다.");
-        return false;
-    }
-
-    char line[sizeof(Memo) + 100];
-    bool found = false;
-    while (fgets(line, sizeof(line), file))
-    {
-        int id;
-        sscanf(line, "%d", &id);
-        if (id == memo_id)
-        {
-            // OK:id\tcreated_at\tupdated_at\ttitle\tcontent 형식으로 전체 데이터 반환
-            char created_at[DATETIME_MAX], updated_at[DATETIME_MAX], title[MEMO_TITLE_MAX], content[MEMO_CONTENT_MAX];
-            sscanf(line, "%d\t%[^\t]\t%[^\t]\t%[^\t]\t%[^\n]", &id, created_at, updated_at, title, content);
-            snprintf(output, output_size, "OK:%d\t%s\t%s\t%s\t%s", id, created_at, updated_at, title, content);
-            found = true;
-            break;
-        }
-    }
-
-    fclose(file);
-
-    if (!found)
-    {
-        snprintf(output, output_size, "FAIL:메모 ID %d를 찾을 수 없습니다.", memo_id);
-    }
-    return found;
-}
-
-bool add_memo_for_user(const char *user_id, const char *title, const char *content)
-{
-    if (strlen(content) == 0)
-    {
-        return false; // 내용은 비워둘 수 없음
-    }
-
-    Memo new_memo;
-    char filepath[MAX_MEMO_FILE_PATH];
-    get_memo_filepath(user_id, filepath);
-    new_memo.id = get_next_memo_id(filepath);
-
-    // 클라이언트에서 받은 제목을 그대로 사용
-    strncpy(new_memo.title, title, MEMO_TITLE_MAX - 1);
-    new_memo.title[MEMO_TITLE_MAX - 1] = '\0';
-
-    strncpy(new_memo.content, content, MEMO_CONTENT_MAX - 1);
-    new_memo.content[MEMO_CONTENT_MAX - 1] = '\0';
-
-    time_t t = time(NULL);
-    get_current_datetime(new_memo.created_at);
-    strcpy(new_memo.updated_at, new_memo.created_at);
-
-    FILE *file = fopen(filepath, "a");
-    if (!file)
-        return false;
-
-    // 형식: id \t created_at \t updated_at \t title \t content
-    fprintf(file, "%d\t%s\t%s\t%s\t%s\n",
-            new_memo.id, new_memo.created_at, new_memo.updated_at,
-            new_memo.title, new_memo.content);
-
-    fclose(file);
-    return true;
-}
-
-bool update_memo_for_user(const char *user_id, int memo_id, const char *new_content)
-{
-    char filepath[MAX_MEMO_FILE_PATH];
-    get_memo_filepath(user_id, filepath);
-
-    FILE *original_file = fopen(filepath, "r");
-    if (!original_file)
-        return false;
-
-    FILE *temp_file = fopen(TEMP_MEMO_FILE, "w");
-    if (!temp_file)
-    {
-        fclose(original_file);
-        return false;
-    }
-
-    char line[sizeof(Memo)];
-    bool updated = false;
-
-    while (fgets(line, sizeof(line), original_file))
-    {
-        int id;
-        sscanf(line, "%d", &id);
-        if (id == memo_id)
-        {
-            Memo m;
-            m.id = id;
-
-            // 원본 줄에서 제목과 생성일자를 읽어와 보존하고, 제목 자동 생성을 비활성화
-            char old_title[MEMO_TITLE_MAX];
-            sscanf(line, "%*d\t%[^\t]\t%*[^\t]\t%[^\t]", m.created_at, old_title);
-
-            strncpy(m.title, old_title, MEMO_TITLE_MAX - 1);
-            m.title[MEMO_TITLE_MAX - 1] = '\0';
-
-            strncpy(m.content, new_content, MEMO_CONTENT_MAX - 1);
-            m.content[MEMO_CONTENT_MAX - 1] = '\0';
-
-            get_current_datetime(m.updated_at);
-
-            // 형식: id \t created_at \t updated_at \t title \t content
-            fprintf(temp_file, "%d\t%s\t%s\t%s\t%s\n", m.id, m.created_at, m.updated_at, m.title, m.content);
-            updated = true;
-        }
-        else
-        {
-            fputs(line, temp_file);
-        }
-    }
-    fclose(original_file);
-    fclose(temp_file);
-
-    if (updated)
-    {
-        remove(filepath);
-        rename(TEMP_MEMO_FILE, filepath);
+        g_memo_list_head = node_to_add;
     }
     else
     {
-        remove(TEMP_MEMO_FILE);
-    }
-
-    return updated;
-}
-
-bool delete_memo_for_user(const char *user_id, int memo_id)
-{
-    char filepath[MAX_MEMO_FILE_PATH];
-    get_memo_filepath(user_id, filepath);
-
-    FILE *original_file = fopen(filepath, "r");
-    if (!original_file)
-        return false;
-
-    FILE *temp_file = fopen(TEMP_MEMO_FILE, "w");
-    if (!temp_file)
-    {
-        fclose(original_file);
-        return false;
-    }
-
-    char line[sizeof(Memo)];
-    bool deleted = false;
-    while (fgets(line, sizeof(line), original_file))
-    {
-        int id;
-        sscanf(line, "%d", &id);
-
-        if (id == memo_id)
+        MemoNode *current = g_memo_list_head;
+        while (current->next)
         {
-            deleted = true;
-            continue; // 이 라인을 건너뛰어 임시 파일에 쓰지 않음
+            current = current->next;
         }
-        fputs(line, temp_file);
+        current->next = node_to_add;
     }
-
-    fclose(original_file);
-    fclose(temp_file);
-
-    if (deleted)
-    {
-        remove(filepath);
-        rename(TEMP_MEMO_FILE, filepath);
-    }
-    else
-    {
-        remove(TEMP_MEMO_FILE);
-    }
-
-    return deleted;
 }
 
-// 특정 메모의 원본 내용을 가져옵니다. (수정용)
-bool get_raw_memo_content(const char *user_id, int memo_id, char *content_output, int content_size)
+// 메모 노드 찾기
+static MemoNode *find_memo_node(int memo_id, const char *user_id)
 {
-    char filepath[MAX_MEMO_FILE_PATH];
-    get_memo_filepath(user_id, filepath);
-    FILE *file = fopen(filepath, "r");
-    if (!file)
+    MemoNode *current = g_memo_list_head;
+    while (current)
     {
-        return false;
-    }
-
-    char line[sizeof(Memo)];
-    bool found = false;
-    while (fgets(line, sizeof(line), file))
-    {
-        int id;
-        sscanf(line, "%d", &id);
-        if (id == memo_id)
+        if (current->memo.id == memo_id && strcmp(current->memo.user_id, user_id) == 0)
         {
-            // 형식: id \t created_at \t updated_at \t title \t content
-            // content는 5번째 필드
-            sscanf(line, "%*d\t%*[^\t]\t%*[^\t]\t%*[^\t]\t%[^\n]", content_output);
-            found = true;
-            break;
+            return current;
         }
+        current = current->next;
     }
-    fclose(file);
-    return found;
+    return NULL;
 }
 
-// 특정 연월의 메모 목록을 가져옵니다.
-bool list_memos_by_month(const char *user_id, int year, int month, char *output, int output_size)
+// UTF-8 소문자 변환
+static void to_lowercase_utf8(const char *src, char *dest, size_t dest_size)
 {
-    char filepath[MAX_MEMO_FILE_PATH];
-    get_memo_filepath(user_id, filepath);
-    FILE *file = fopen(filepath, "r");
-    if (!file)
+    strncpy(dest, src, dest_size);
+    if (dest_size > 0)
     {
-        output[0] = '\0'; // 파일이 없으면 빈 문자열 반환
-        return true;
+        dest[dest_size - 1] = '\0';
     }
-
-    int offset = 0;
-    char line[sizeof(Memo) + 100]; // 버퍼 여유 공간 추가
-    bool found = false;
-
-    output[0] = '\0'; // 출력 버퍼 초기화
-
-    while (fgets(line, sizeof(line), file))
+    for (int i = 0; dest[i] != '\0'; i++)
     {
-        int memo_year, memo_month;
-        // sscanf가 2개의 값을 성공적으로 읽었는지 확인
-        if (sscanf(line, "%*d\t%d-%d", &memo_year, &memo_month) == 2)
+        dest[i] = tolower((unsigned char)dest[i]);
+    }
+}
+
+// 메모 초기화
+void memo_init()
+{
+    WIN32_FIND_DATA findFileData;
+    HANDLE hFind = INVALID_HANDLE_VALUE;
+    char searchPath[MAX_PATH];
+    snprintf(searchPath, MAX_PATH, "%s*_memos.txt", DATA_DIR);
+    hFind = FindFirstFile(searchPath, &findFileData);
+    if (hFind == INVALID_HANDLE_VALUE)
+    {
+        printf("No memo files found. Initializing empty memo list.\n");
+        return;
+    }
+    do
+    {
+        // 디렉토리가 아닌 경우에만 처리
+        if (!(findFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
         {
-            if (memo_year == year && memo_month == month)
+            // 파일 이름에서 사용자 ID 추출
+            char user_id[MAX_USER_ID_LEN] = {0};
+            char *suffix = "_memos.txt";
+            char *suffix_ptr = strstr(findFileData.cFileName, suffix);
+            if (suffix_ptr)
             {
-                // sscanf로 인한 멀티바이트 문자 깨짐 방지
-                // 라인 전체를 그대로 클라이언트에 전송하여 파싱을 클라이언트에 위임
-                // content 필드는 매우 클 수 있으므로, 제목까지만 잘라서 보냄
-
-                char *p_content = strstr(line, "\t"); // id
-                if (p_content)
-                    p_content = strstr(p_content + 1, "\t"); // created_at
-                if (p_content)
-                    p_content = strstr(p_content + 1, "\t"); // updated_at
-                if (p_content)
-                    p_content = strstr(p_content + 1, "\t"); // title
-
-                if (p_content)
-                {
-                    int len_to_send = (p_content - line);
-                    if (offset + len_to_send + 1 < output_size)
-                    {
-                        strncat(output + offset, line, len_to_send);
-                        strcat(output, "\n");
-                        offset += len_to_send + 1;
-                        found = true;
-                    }
-                }
-            }
-        }
-    }
-
-    fclose(file);
-    return true; // 데이터를 찾았든 못찾았든 연산 자체는 성공
-}
-
-// 서버 시작/종료 시 호출되는 함수 (링커 오류 해결용)
-void load_memos_from_file(void)
-{
-    return;
-}
-
-void free_all_memos(void)
-{
-}
-
-// 문자열을 소문자로 변환하는 내부 유틸리티 함수
-// 검색 시 대소문자 구분 없는 비교를 위해 사용됩니다.
-static void to_lowercase(const char *src, char *dest, size_t dest_size)
-{
-    size_t i = 0;
-    for (i = 0; i < dest_size - 1 && src[i] != '\0'; i++)
-    {
-        dest[i] = tolower((unsigned char)src[i]);
-    }
-    dest[i] = '\0';
-}
-
-bool search_memos(const char *user_id, const char *field, const char *keyword, char *output, int output_size)
-{
-    if (!field || !keyword || keyword[0] == '\0')
-    {
-        snprintf(output, output_size, "FAIL:검색 필드와 키워드를 정확히 입력해주세요.");
-        return false;
-    }
-
-    char filepath[MAX_MEMO_FILE_PATH];
-    get_memo_filepath(user_id, filepath);
-    FILE *file = fopen(filepath, "r");
-    if (!file)
-    {
-        snprintf(output, output_size, ""); // 파일이 없으면 빈 결과를 반환 (오류 아님)
-        return true;
-    }
-
-    char lower_keyword[MEMO_CONTENT_MAX];
-    to_lowercase(keyword, lower_keyword, sizeof(lower_keyword));
-
-    output[0] = '\0';
-    int offset = 0;
-    char line[sizeof(Memo) + 200];
-    bool found = false;
-
-    while (fgets(line, sizeof(line), file))
-    {
-        int id;
-        char created_at[DATETIME_MAX], updated_at[DATETIME_MAX], title[MEMO_TITLE_MAX], content[MEMO_CONTENT_MAX];
-        // 파일의 각 줄을 파싱하여 모든 정보를 변수에 저장
-        sscanf(line, "%d\t%[^\t]\t%[^\t]\t%[^\t]\t%[^\n]", &id, created_at, updated_at, title, content);
-
-        bool match = false;
-        char lower_target[MEMO_CONTENT_MAX];
-
-        if (strcmp(field, "title") == 0)
-        {
-            to_lowercase(title, lower_target, sizeof(lower_target));
-            if (strstr(lower_target, lower_keyword))
-            {
-                match = true;
-            }
-        }
-        else if (strcmp(field, "content") == 0)
-        {
-            to_lowercase(content, lower_target, sizeof(lower_target));
-            if (strstr(lower_target, lower_keyword))
-            {
-                match = true;
-            }
-        }
-        else if (strcmp(field, "all") == 0)
-        {
-            to_lowercase(title, lower_target, sizeof(lower_target));
-            if (strstr(lower_target, lower_keyword))
-            {
-                match = true;
+                size_t user_id_len = suffix_ptr - findFileData.cFileName;
+                strncpy(user_id, findFileData.cFileName, user_id_len);
+                user_id[user_id_len] = '\0';
             }
             else
             {
-                to_lowercase(content, lower_target, sizeof(lower_target));
-                if (strstr(lower_target, lower_keyword))
+                continue;
+            }
+            // 파일 경로 생성
+            char full_path[MAX_PATH];
+            snprintf(full_path, MAX_PATH, "%s%s", DATA_DIR, findFileData.cFileName);
+            FILE *file = fopen(full_path, "r");
+            if (!file)
+                continue;
+            // 파일에서 메모 데이터 읽기
+            Memo memo;
+            while (fscanf(file, "%d\t%[^\t]\t%[^\t]\t%[^\t]\t%[^\n]\n", &memo.id, memo.created_at, memo.updated_at, memo.title, memo.content) == 5)
+            {
+                strncpy(memo.user_id, user_id, MAX_USER_ID_LEN - 1);
+                memo.user_id[MAX_USER_ID_LEN - 1] = '\0';
+                // 메모 노드 생성
+                MemoNode *new_node = create_memo_node(&memo);
+                if (new_node)
+                {
+                    append_memo_node(new_node);
+                    // 다음 메모 ID 업데이트
+                    if (memo.id >= g_next_memo_id)
+                    {
+                        g_next_memo_id = memo.id + 1;
+                    }
+                }
+            }
+            fclose(file);
+        }
+        // 다음 파일 찾기
+    } while (FindNextFile(hFind, &findFileData) != 0);
+    // 파일 핸들 닫기
+    FindClose(hFind);
+    printf("Memo data loaded. Next memo ID is %d\n", g_next_memo_id);
+}
+
+// 메모 정리
+void memo_cleanup()
+{
+    // 메모 노드 정리
+    MemoNode *current = g_memo_list_head;
+    while (current)
+    {
+        // 다음 노드 저장
+        MemoNode *next = current->next;
+        free(current);
+        current = next;
+    }
+    // 메모 노드 헤드 초기화
+    g_memo_list_head = NULL;
+}
+
+// 모든 메모를 파일에 저장
+void memo_save_all_to_files()
+{
+    // 사용자별 메모 목록 생성
+    char users[100][MAX_USER_ID_LEN];
+    int user_count = 0;
+    MemoNode *current = g_memo_list_head;
+    while (current)
+    {
+        // 이미 처리한 사용자인지 확인
+        bool found = false;
+        for (int i = 0; i < user_count; i++)
+        {
+            if (strcmp(users[i], current->memo.user_id) == 0)
+            {
+                found = true;
+                break;
+            }
+        }
+        if (!found && user_count < 100)
+        {
+            // 새로운 사용자 추가
+            strncpy(users[user_count], current->memo.user_id, MAX_USER_ID_LEN - 1);
+            users[user_count][MAX_USER_ID_LEN - 1] = '\0';
+            user_count++;
+        }
+        current = current->next;
+    }
+    // 각 사용자별 메모 목록 저장
+    for (int i = 0; i < user_count; i++)
+    {
+        char filepath[MAX_PATH];
+        // 파일 경로 생성
+        snprintf(filepath, MAX_PATH, "%s%s_memos.txt", DATA_DIR, users[i]);
+        // 파일 열기
+        FILE *file = fopen(filepath, "w");
+        if (!file)
+            continue;
+        // 메모 목록 저장
+        current = g_memo_list_head;
+        while (current)
+        {
+            if (strcmp(current->memo.user_id, users[i]) == 0)
+            {
+                fprintf(file, "%d\t%s\t%s\t%s\t%s\n", current->memo.id, current->memo.created_at, current->memo.updated_at, current->memo.title, current->memo.content);
+            }
+            current = current->next;
+        }
+        fclose(file);
+    }
+}
+
+// 메모 추가
+bool memo_add(const char *user_id, const char *title, const char *content)
+{
+    // 새 메모 노드 생성
+    Memo new_memo;
+    // 새 메모 ID 생성
+    new_memo.id = g_next_memo_id++;
+    // 사용자 ID 복사
+    strncpy(new_memo.user_id, user_id, MAX_USER_ID_LEN);
+    new_memo.user_id[MAX_USER_ID_LEN - 1] = '\0';
+    // 제목 복사
+    strncpy(new_memo.title, title, MAX_MEMO_TITLE_LEN);
+    new_memo.title[MAX_MEMO_TITLE_LEN - 1] = '\0';
+    strncpy(new_memo.content, content, MAX_MEMO_CONTENT_LEN);
+    new_memo.content[MAX_MEMO_CONTENT_LEN - 1] = '\0';
+    // 현재 날짜와 시간 설정
+    get_current_datetime(new_memo.created_at, MAX_DATETIME_LEN);
+    strcpy(new_memo.updated_at, new_memo.created_at);
+    // 메모 노드 생성
+    MemoNode *new_node = create_memo_node(&new_memo);
+    if (!new_node)
+        return false;
+    // 메모 노드 추가
+    append_memo_node(new_node);
+    // 모든 메모를 파일에 저장
+    memo_save_all_to_files(); // 즉시 저장
+    return true;
+}
+
+// 메모 삭제
+bool memo_delete(int memo_id, const char *user_id)
+{
+    // 메모 노드 탐색
+    MemoNode *current = g_memo_list_head;
+    MemoNode *prev = NULL;
+    // 메모 노드 삭제
+    while (current)
+    {
+        if (current->memo.id == memo_id && strcmp(current->memo.user_id, user_id) == 0)
+        {
+            // 이전 노드가 있는 경우
+            if (prev)
+            {
+                prev->next = current->next;
+            }
+            else
+            {
+                g_memo_list_head = current->next;
+            }
+            free(current);
+            memo_save_all_to_files(); // 즉시 저장
+            return true;
+        }
+        prev = current;
+        current = current->next;
+    }
+    return false;
+}
+
+// 회원 탈퇴 시, 해당 사용자의 모든 메모 데이터를 삭제
+bool memo_delete_by_user_id(const char *user_id)
+{
+    MemoNode *current = g_memo_list_head;
+    MemoNode *prev = NULL;
+    bool changed = false;
+    while (current != NULL)
+    {
+        // 사용자 ID 비교
+        if (strcmp(current->memo.user_id, user_id) == 0)
+        {
+            // 삭제할 노드 저장
+            MemoNode *node_to_delete = current;
+            // 이전 노드가 없는 경우
+            if (prev == NULL)
+            {
+                g_memo_list_head = current->next;
+            }
+            // 이전 노드가 있는 경우
+            else
+            {
+                prev->next = current->next;
+            }
+            // 현재 노드 이동
+            current = current->next;
+            // 노드 메모리 해제
+            free(node_to_delete);
+            // 변경 표시
+            changed = true;
+        }
+        else
+        {
+            // 이전 노드 업데이트
+            prev = current;
+            current = current->next;
+        }
+    }
+    // 파일 경로 생성
+    char filepath[MAX_PATH];
+    snprintf(filepath, sizeof(filepath), "%s%s_memos.txt", DATA_DIR, user_id);
+    // 파일 삭제
+    if (remove(filepath) == 0)
+    {
+        printf("[정보] %s 파일이 성공적으로 삭제되었습니다.\n", filepath);
+    }
+    else
+    {
+        printf("[정보] %s 파일을 찾을 수 없거나 삭제할 수 없습니다.\n", filepath);
+    }
+    return changed;
+}
+
+// 메모 수정
+bool memo_update(int memo_id, const char *user_id, const char *new_content)
+{
+    MemoNode *node_to_update = find_memo_node(memo_id, user_id);
+    // 메모 노드 업데이트
+    if (node_to_update)
+    {
+        // 내용 복사
+        strncpy(node_to_update->memo.content, new_content, MAX_MEMO_CONTENT_LEN);
+        node_to_update->memo.content[MAX_MEMO_CONTENT_LEN - 1] = '\0';
+        // 수정 시간 업데이트
+        get_current_datetime(node_to_update->memo.updated_at, MAX_DATETIME_LEN);
+        memo_save_all_to_files(); // 즉시 저장
+        return true;
+    }
+    return false;
+}
+
+// 사용자의 메모 목록 출력
+bool memo_list_for_user(const char *user_id, char *output, int output_size)
+{
+    int offset = 0;
+    bool found = false;
+    offset += snprintf(output + offset, output_size - offset, "OK:[%s님의 메모 목록]\n", user_id);
+    MemoNode *current = g_memo_list_head;
+    while (current)
+    {
+        // 사용자 ID 비교
+        if (strcmp(current->memo.user_id, user_id) == 0)
+        {
+            offset += snprintf(output + offset, output_size - offset, "  - [%d] %s\n", current->memo.id, current->memo.title);
+            found = true;
+        }
+        current = current->next;
+    }
+    if (!found)
+    {
+        snprintf(output, output_size, "OK:작성된 메모가 없습니다.");
+    }
+    return true;
+}
+
+// 메모 조회
+bool memo_get_by_id(int memo_id, const char *user_id, char *output, int output_size)
+{
+    MemoNode *node = find_memo_node(memo_id, user_id);
+    if (node)
+    {
+        Memo *m = &node->memo;
+        snprintf(output, output_size, "OK:%d\t%s\t%s\t%s\t%s", m->id, m->created_at, m->updated_at, m->title, m->content);
+        return true;
+    }
+    snprintf(output, output_size, "FAIL:메모 ID %d를 찾을 수 없습니다.", memo_id);
+    return false;
+}
+
+// 월별 메모 목록 출력
+bool memo_list_by_month(const char *user_id, int year, int month, char *output, int output_size)
+{
+    output[0] = '\0';
+    int offset = 0;
+    bool found = false;
+    MemoNode *current = g_memo_list_head;
+    while (current)
+    {
+        // 사용자 ID 비교
+        if (strcmp(current->memo.user_id, user_id) == 0)
+        {
+            // 메모 날짜 분리
+            int memo_year, memo_month;
+            if (sscanf(current->memo.created_at, "%d-%d", &memo_year, &memo_month) == 2)
+            {
+                // 년도와 월 비교
+                if (memo_year == year && memo_month == month)
+                {
+                    // 메모 출력
+                    offset += snprintf(output + offset, output_size - offset, "%d\t%s\t%s\t%s\n", current->memo.id, current->memo.created_at, current->memo.updated_at, current->memo.title);
+                    found = true;
+                }
+            }
+        }
+        current = current->next;
+    }
+    if (!found)
+    {
+        // 메모 없음
+        snprintf(output, output_size, "OK");
+    }
+    return true;
+}
+
+// 메모 검색
+bool memo_search(const char *user_id, const char *field, const char *keyword, char *output, int output_size)
+{
+    // 출력 초기화
+    output[0] = '\0';
+    int offset = 0;
+    // 검색 결과 표시
+    bool found = false;
+    // 키워드 소문자 변환
+    char lower_keyword[MAX_MEMO_CONTENT_LEN];
+    to_lowercase_utf8(keyword, lower_keyword, sizeof(lower_keyword));
+    // 키워드가 없으면 종료
+    if (strlen(lower_keyword) == 0)
+    {
+        // 검색 결과 없음
+        snprintf(output, output_size, "OK");
+        return true;
+    }
+    // 메모 노드 탐색
+    MemoNode *current = g_memo_list_head;
+    while (current)
+    {
+        // 사용자 ID 비교
+        if (strcmp(current->memo.user_id, user_id) == 0)
+        {
+            // 제목 또는 내용 검색
+            bool match = false;
+            char lower_buffer[MAX_MEMO_CONTENT_LEN];
+            // 제목 검색
+            if (strcmp(field, "title") == 0 || strcmp(field, "all") == 0)
+            {
+                to_lowercase_utf8(current->memo.title, lower_buffer, sizeof(lower_buffer));
+                if (strstr(lower_buffer, lower_keyword))
                 {
                     match = true;
                 }
             }
+            // 내용 검색
+            if (!match && (strcmp(field, "content") == 0 || strcmp(field, "all") == 0))
+            {
+                to_lowercase_utf8(current->memo.content, lower_buffer, sizeof(lower_buffer));
+                if (strstr(lower_buffer, lower_keyword))
+                {
+                    match = true;
+                }
+            }
+            if (match)
+            {
+                // 메모 출력
+                offset += snprintf(output + offset, output_size - offset, "%d\t%s\t%s\t%s\n", current->memo.id, current->memo.created_at, current->memo.updated_at, current->memo.title);
+                found = true;
+            }
         }
-
-        if (match)
-        {
-            // 클라이언트에서 파싱하기 용이한 포맷으로 결과 문자열 추가
-            offset += snprintf(output + offset, output_size - offset,
-                               "%d\t%s\t%s\t%s\n",
-                               id, created_at, updated_at, title);
-            found = true;
-        }
+        current = current->next;
     }
-
-    fclose(file);
-
     if (!found)
     {
-        // 검색 결과가 없는 경우, 클라이언트가 알 수 있도록 특정 메시지 대신 빈 문자열을 보냄
-        snprintf(output, output_size, "");
+        // 검색 결과 없음
+        snprintf(output, output_size, "OK");
     }
-
     return true;
 }

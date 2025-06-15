@@ -11,21 +11,20 @@
 #define REQUEST_BUF_SIZE 2048
 #define REPLY_BUF_SIZE 65536
 #define ITEMS_PER_PAGE 10
+#define CLIENT_MEMO_CACHE_SIZE 100
 
-// --- 화면 모드 관리 ---
+// 화면 모드 관리
 typedef enum
 {
     MODE_MONTHLY, // 월별 보기 모드
     MODE_SEARCH   // 검색 결과 보기 모드
 } ViewMode;
 
-// --- 전역 변수 및 구조체 ---
-static Memo g_memo_cache[MAX_MEMOS];                // 서버에서 받아온 메모를 캐싱하는 배열
-static int g_memo_count = 0;                        // 캐시된 메모의 수
-static ViewMode g_view_mode = MODE_MONTHLY;         // 현재 화면 모드
-static char g_search_keyword[MEMO_TITLE_MAX] = {0}; // 현재 검색어
-
-// --- 내부 헬퍼 함수 ---
+//  전역 변수 및 구조체
+static Memo g_memo_cache[CLIENT_MEMO_CACHE_SIZE];       // 서버에서 받아온 메모를 캐싱하는 배열
+static int g_memo_count = 0;                            // 캐시된 메모의 수
+static ViewMode g_view_mode = MODE_MONTHLY;             // 현재 화면 모드
+static char g_search_keyword[MAX_MEMO_TITLE_LEN] = {0}; // 현재 검색어
 
 // 서버와 통신
 static bool communicate_with_server(SOCKET sock, const char *request, char *reply)
@@ -42,16 +41,19 @@ static bool communicate_with_server(SOCKET sock, const char *request, char *repl
 // 서버에서 받은 데이터를 파싱하여 g_memo_cache에 저장
 static void parse_and_cache_memos(char *data)
 {
+    // 데이터 초기화
     g_memo_count = 0;
     if (strncmp(data, "OK", 2) == 0 || strncmp(data, "FAIL", 4) == 0 || data[0] == '\0')
     {
         return;
     }
-
+    // 데이터 파싱
     char *context = NULL;
     char *line = strtok_s(data, "\n", &context);
-    while (line != NULL && g_memo_count < MAX_MEMOS)
+    // 메모 캐시 초기화
+    while (line != NULL && g_memo_count < CLIENT_MEMO_CACHE_SIZE)
     {
+        // 메모 데이터 파싱
         char *inner_context = NULL;
         char *id_str = strtok_s(line, "\t", &inner_context);
         char *created_at_str = strtok_s(NULL, "\t", &inner_context);
@@ -60,20 +62,23 @@ static void parse_and_cache_memos(char *data)
 
         if (id_str && created_at_str && updated_at_str && title_str)
         {
+            // 메모 데이터 저장
             Memo *m = &g_memo_cache[g_memo_count];
             m->id = atoi(id_str);
 
-            strncpy(m->created_at, created_at_str, DATETIME_MAX - 1);
-            m->created_at[DATETIME_MAX - 1] = '\0';
+            strncpy(m->created_at, created_at_str, MAX_DATETIME_LEN - 1);
+            m->created_at[MAX_DATETIME_LEN - 1] = '\0';
 
-            strncpy(m->updated_at, updated_at_str, DATETIME_MAX - 1);
-            m->updated_at[DATETIME_MAX - 1] = '\0';
+            strncpy(m->updated_at, updated_at_str, MAX_DATETIME_LEN - 1);
+            m->updated_at[MAX_DATETIME_LEN - 1] = '\0';
 
-            strncpy(m->title, title_str, MEMO_TITLE_MAX - 1);
-            m->title[MEMO_TITLE_MAX - 1] = '\0';
+            strncpy(m->title, title_str, MAX_MEMO_TITLE_LEN - 1);
+            m->title[MAX_MEMO_TITLE_LEN - 1] = '\0';
 
+            // 메모 카운트 증가
             g_memo_count++;
         }
+        // 다음 라인 파싱
         line = strtok_s(NULL, "\n", &context);
     }
 }
@@ -81,15 +86,19 @@ static void parse_and_cache_memos(char *data)
 // UTF-8 문자의 시작 바이트만 인식하여 너비를 계산하는 안정적인 함수
 static void format_title_for_display(const char *original, char *buffer, int buffer_size, int visual_width)
 {
+    // 현재 너비 초기화
     int current_width = 0;
     int original_byte_pos = 0;
     int buffer_byte_pos = 0;
 
+    // 원본 문자열 파싱
     while (original[original_byte_pos] != '\0')
     {
+        // 문자 너비 초기화
         int char_width = 0;
         int char_bytes = 0;
 
+        // 첫 바이트 파싱
         unsigned char first_byte = original[original_byte_pos];
 
         // UTF-8 시작 바이트를 기준으로 문자 바이트 수와 너비 결정
@@ -98,21 +107,23 @@ static void format_title_for_display(const char *original, char *buffer, int buf
             char_width = 1;
             char_bytes = 1;
         }
+        // 2바이트 문자
         else if ((first_byte & 0xE0) == 0xC0)
         { // 110xxxxx (2-byte)
             char_width = 2;
             char_bytes = 2;
         }
+        // 3바이트 문자
         else if ((first_byte & 0xF0) == 0xE0)
         { // 1110xxxx (3-byte, 한글 등)
             char_width = 2;
             char_bytes = 3;
         }
+        // 잘못된 문자
         else
         {
-            // 잘못된 문자 또는 4바이트 이상의 문자는 1칸짜리 '?'로 표시 (안전장치)
             char_width = 1;
-            char_bytes = 1; // 1바이트만 건너뛰어 다음 바이트부터 다시 파싱 시도
+            char_bytes = 1;
         }
 
         // 이번 문자를 포함하면 너비를 초과하는지 확인
@@ -121,8 +132,6 @@ static void format_title_for_display(const char *original, char *buffer, int buf
             break;
         }
 
-        // 원본 문자열에서 남은 바이트가 실제 문자 바이트 수보다 적거나,
-        // 버퍼에 복사할 공간이 부족하면 중단 (잘못된 UTF-8 시퀀스로 인한 오버플로우 방지)
         if (strlen(original + original_byte_pos) < char_bytes || buffer_byte_pos + char_bytes >= buffer_size)
         {
             break;
@@ -151,24 +160,30 @@ static void format_title_for_display(const char *original, char *buffer, int buf
 static void display_ui(int year, int month, int page)
 {
     clear_screen();
+    // 월별 모드일 때
     if (g_view_mode == MODE_MONTHLY)
     {
+        // 월별 모드 표시
         printf("[ %d년 %02d월 ]     |     이번 달의 메모 [ %d건 ]\n", year, month, g_memo_count);
     }
+    // 검색 모드일 때
     else // MODE_SEARCH
     {
+        // 검색 모드 표시
         printf("[ 검색 결과 ]     |     '%s'에 대한 메모 [ %d건 ]\n", g_search_keyword, g_memo_count);
     }
     printf("──────────────────────────────────────────────────────────────────────────────────────────────────\n");
     printf(" ID   | 제목                                       | 작성일시            | 수정일시\n");
     printf("──────────────────────────────────────────────────────────────────────────────────────────────────\n");
 
+    // 메모가 없을 때
     if (g_memo_count == 0)
     {
         for (int i = 0; i < 4; i++)
         {
             printf("\n");
         }
+        // 월별 모드일 때
         if (g_view_mode == MODE_MONTHLY)
         {
             printf("                                     이 달에 작성된 메모가 없습니다.\n");
@@ -177,6 +192,7 @@ static void display_ui(int year, int month, int page)
         {
             printf("                                       검색 결과가 없습니다.\n");
         }
+        // 페이지 빈 공간 추가
         for (int i = 0; i < ITEMS_PER_PAGE - 5; i++)
         {
             printf("\n");
@@ -184,44 +200,57 @@ static void display_ui(int year, int month, int page)
     }
     else
     {
+        // 페이지 시작 인덱스 계산
         int start_index = page * ITEMS_PER_PAGE;
         for (int i = 0; i < ITEMS_PER_PAGE; i++)
         {
+            // 현재 인덱스 계산
             int current_index = start_index + i;
             if (current_index < g_memo_count)
             {
+                // 메모 데이터 가져오기
                 Memo *m = &g_memo_cache[current_index];
                 char formatted_title[100];
                 format_title_for_display(m->title, formatted_title, sizeof(formatted_title), 42);
                 printf(" %-4d | %s | %-19s |", m->id, formatted_title, m->created_at);
+                // 수정일시가 있으면 출력
                 if (strcmp(m->created_at, m->updated_at) != 0)
                 {
+                    // 수정일시 출력
                     printf(" %s\n", m->updated_at);
                 }
                 else
                 {
+                    // 수정일시 없으면 줄바꿈
                     printf("\n");
                 }
             }
             else
             {
+                // 메모가 없으면 줄바꿈
                 printf("\n");
             }
         }
     }
 
+    // 총 페이지 수 계산
     int total_pages = (g_memo_count + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE;
     if (total_pages == 0)
+    {
         total_pages = 1;
+    }
     printf("──────────────────────────────────────────────────────────────────────────────────────────────────\n");
 
+    // 월별 모드일 때
     if (g_view_mode == MODE_MONTHLY)
     {
         printf("Page %d/%d | ↑↓: 월 이동 | ←→: 페이지 이동 | Enter: 조회\n", page + 1, total_pages);
         printf("1: 추가 | 2: 수정 | 3: 삭제 | 4: 검색 | ESC: 뒤로가기\n");
     }
+    // 검색 모드일 때
     else // MODE_SEARCH
     {
+        // 검색 모드 표시
         printf("Page %d/%d | ←→: 페이지 이동 | Enter: 조회 | ESC: 검색 종료\n", page + 1, total_pages);
         printf("1: 추가 | 2: 수정 | 3: 삭제\n");
     }
@@ -244,61 +273,63 @@ static void display_detail_template(const char *title, const char *created_at, c
     printf("──────────────────────────────────────────────────────────────────────────────────────────────────\n");
 }
 
+// 새 메모 추가 기능
 static void add_new_memo(SOCKET sock, const char *user_id)
 {
-    char title[MEMO_TITLE_MAX], content[MEMO_CONTENT_MAX];
+    char title[MAX_MEMO_TITLE_LEN], content[MAX_MEMO_CONTENT_LEN];
     char request[REQUEST_BUF_SIZE], reply[REPLY_BUF_SIZE];
 
     clear_screen();
     printf("──────────────────────────────────────────────────────────────────────────────────────────────────\n");
-    printf(" 새 메모 작성 (ESC: 취소)\n");
+    printf(" 새 메모 작성\n");
     printf("──────────────────────────────────────────────────────────────────────────────────────────────────\n");
-
-    if (!get_line_input(title, sizeof(title), "\n제목"))
-    {
+    if (!get_line_input(title, sizeof(title), "제목"))
         return;
-    }
+    if (!get_line_input(content, sizeof(content), "내용"))
+        return;
 
-    if (!get_line_input(content, sizeof(content), "\n내용"))
+    if (strlen(title) == 0 || strlen(content) == 0)
     {
+        printf("[클라이언트] 제목과 내용은 비워둘 수 없습니다.\n");
+        Sleep(1000);
         return;
     }
 
     snprintf(request, sizeof(request), "MEMO_ADD:%s:%s:%s", user_id, title, content);
-    if (communicate_with_server(sock, request, reply))
+    if (communicate_with_server(sock, request, reply) && strncmp(reply, "OK", 2) == 0)
     {
-        printf("\n[성공] %s\n", reply);
+        printf("[클라이언트] %s\n", reply + 3);
     }
     else
     {
-        printf("\n[실패] 서버와 통신하지 못했습니다.\n");
+        printf("[클라이언트] %s\n", reply + 5);
     }
-    printf("계속하려면 아무 키나 누르세요...");
-    _getch();
+    Sleep(1000); // 1초 대기 후 자동으로 메뉴로 복귀
 }
 
 // 메모 상세보기 기능
 static void view_memo_details(SOCKET sock, const char *user_id)
 {
+    // 메모 ID 버퍼 선언
     char memo_id_str[10];
     char request[REQUEST_BUF_SIZE], reply[REPLY_BUF_SIZE];
-
-    if (get_validated_input(memo_id_str, sizeof(memo_id_str), "\n조회할 메모 ID", false, false))
+    // 메모 ID 입력받기
+    if (get_secure_input(memo_id_str, sizeof(memo_id_str), "\n조회할 메모 ID", false, true))
     {
         snprintf(request, sizeof(request), "MEMO_VIEW:%s:%s", user_id, memo_id_str);
         if (communicate_with_server(sock, request, reply) && strncmp(reply, "OK:", 3) == 0)
         {
             // 서버 응답 형식: OK:id\tcreated_at\tupdated_at\ttitle\tcontent
             char *p_reply = reply + 3;
-            char created_at[DATETIME_MAX], updated_at[DATETIME_MAX], title[MEMO_TITLE_MAX], content[MEMO_CONTENT_MAX];
+            char created_at[MAX_DATETIME_LEN], updated_at[MAX_DATETIME_LEN], title[MAX_MEMO_TITLE_LEN], content[MAX_MEMO_CONTENT_LEN];
 
             sscanf(p_reply, "%*[^\t]\t%[^\t]\t%[^\t]\t%[^\t]\t%[^\n]", created_at, updated_at, title, content);
 
             display_detail_template(title, created_at, updated_at, content);
-            printf("ESC: 뒤로가기\n");
+            printf("Enter: 뒤로가기\n");
 
-            while (_getch() != 27)
-                ; // ESC를 누를 때까지 대기
+            while (_getch() != KEY_ENTER)
+                ; // Enter를 누를 때까지 대기
         }
         else
         {
@@ -309,40 +340,39 @@ static void view_memo_details(SOCKET sock, const char *user_id)
     }
 }
 
+// 기존 메모 수정 기능
 static void update_existing_memo(SOCKET sock, const char *user_id)
 {
-    char memo_id_str[10];
+    char memo_id_str[10], new_content[MAX_MEMO_CONTENT_LEN];
     char request[REQUEST_BUF_SIZE], reply[REPLY_BUF_SIZE];
+    int memo_id;
 
-    if (!get_validated_input(memo_id_str, sizeof(memo_id_str), "\n수정할 메모 ID", false, false))
+    if (!get_secure_input(memo_id_str, sizeof(memo_id_str), "수정할 메모 ID", false, true))
+        return;
+    memo_id = atoi(memo_id_str);
+
+    // TODO: ID 유효성 검사 (g_memo_cache에 존재하는지)
+
+    if (!get_line_input(new_content, sizeof(new_content), "새 내용"))
         return;
 
-    snprintf(request, sizeof(request), "MEMO_VIEW:%s:%s", user_id, memo_id_str);
-    if (communicate_with_server(sock, request, reply) && strncmp(reply, "OK:", 3) == 0)
+    if (strlen(new_content) == 0)
     {
-        char *p_reply = reply + 3;
-        char created_at[DATETIME_MAX], updated_at[DATETIME_MAX], title[MEMO_TITLE_MAX], content[MEMO_CONTENT_MAX];
-        sscanf(p_reply, "%*[^\t]\t%[^\t]\t%[^\t]\t%[^\t]\t%[^\n]", created_at, updated_at, title, content);
+        printf("[클라이언트] 내용은 비워둘 수 없습니다.\n");
+        Sleep(1000);
+        return;
+    }
 
-        display_detail_template(title, created_at, updated_at, content);
-
-        // ESC 취소 기능 안내 문구 추가
-        printf("ESC: 수정 취소\n\n");
-
-        char new_content[MEMO_CONTENT_MAX];
-        if (!get_line_input(new_content, sizeof(new_content), "새 내용 입력"))
-            return;
-
-        snprintf(request, sizeof(request), "MEMO_UPDATE:%s:%s:%s", user_id, memo_id_str, new_content);
-        communicate_with_server(sock, request, reply);
-        printf("\n%s\n", reply);
+    snprintf(request, sizeof(request), "MEMO_UPDATE:%s:%d:%s", user_id, memo_id, new_content);
+    if (communicate_with_server(sock, request, reply) && strncmp(reply, "OK", 2) == 0)
+    {
+        printf("[클라이언트] %s\n", reply + 3);
     }
     else
     {
-        printf("\n%s\n", reply);
+        printf("[클라이언트] %s\n", reply + 5);
     }
-    printf("\n계속하려면 아무 키나 누르세요...");
-    _getch();
+    Sleep(1000); // 1초 대기 후 자동으로 메뉴로 복귀
 }
 
 // 삭제 시 확인 절차 추가
@@ -350,69 +380,76 @@ static void delete_existing_memo(SOCKET sock, const char *user_id)
 {
     char memo_id_str[10];
     char request[REQUEST_BUF_SIZE], reply[REPLY_BUF_SIZE];
+    int memo_id;
 
-    if (!get_validated_input(memo_id_str, sizeof(memo_id_str), "\n삭제할 메모 ID", false, false))
+    if (!get_secure_input(memo_id_str, sizeof(memo_id_str), "삭제할 메모 ID", false, true))
+        return;
+    memo_id = atoi(memo_id_str);
+
+    // TODO: ID 유효성 검사
+
+    snprintf(request, sizeof(request), "MEMO_DELETE:%s:%d", user_id, memo_id);
+    if (communicate_with_server(sock, request, reply) && strncmp(reply, "OK", 2) == 0)
     {
-        return; // ESC 입력 시 함수 종료
-    }
-
-    printf("\n정말로 이 메모를 삭제하시겠습니까? (y/n) ");
-    char ch = _getch();
-    printf("\n");
-
-    if (ch == 'y' || ch == 'Y')
-    {
-        snprintf(request, sizeof(request), "MEMO_DELETE:%s:%s", user_id, memo_id_str);
-        communicate_with_server(sock, request, reply);
-        printf("\n[서버 응답] %s\n", reply);
+        printf("[클라이언트] %s\n", reply + 3);
     }
     else
     {
-        printf("\n삭제가 취소되었습니다.\n");
+        printf("[클라이언트] %s\n", reply + 5);
     }
-
-    printf("\n계속하려면 아무 키나 누르세요...");
-    _getch();
+    Sleep(1000); // 1초 대기 후 자동으로 메뉴로 복귀
 }
 
 // 검색을 요청하고 실행하는 새로운 함수
 static bool prompt_and_execute_search(SOCKET sock, const char *user_id)
 {
-    char field_char;
-    char keyword[MEMO_TITLE_MAX];
+    char choice;
+    char keyword[MAX_MEMO_TITLE_LEN];
     const char *field;
 
-    printf("\n"); // 프롬프트와 푸터 사이에 한 줄 띄우기
-    field_char = get_single_choice_input("검색 기준 (1:제목, 2:내용, 3:전체)", "123");
+    printf("\n");
 
-    if (field_char == 27) // ESC
-        return false;
+    choice = get_single_choice_input("검색 기준 (1:제목, 2:내용, 3:전체)", "123");
 
-    int choice = field_char - '0'; // '1' -> 1
-    if (choice == 1)
-        field = "title";
-    else if (choice == 2)
-        field = "content";
-    else if (choice == 3)
-        field = "all";
-    else
+    if (choice == KEY_ESC)
     {
-        // get_single_choice_input에서 이미 필터링하므로 이 코드는 실행되지 않음
+        printf("\n[알림] 검색이 취소되었습니다.\n");
+        Sleep(1000);
         return false;
     }
 
-    if (!get_line_input(keyword, sizeof(keyword), "검색어"))
-        return false;
+    if (choice == '1')
+        field = "title";
+    else if (choice == '2')
+        field = "content";
+    else // '3'
+        field = "all";
 
+    if (!get_line_input(keyword, sizeof(keyword), "검색어"))
+    {
+        printf("\n[알림] 검색이 취소되었습니다.\n");
+        Sleep(1000);
+        return false;
+    }
+    if (strlen(keyword) == 0)
+    {
+        printf("\n[알림] 검색이 취소되었습니다.\n");
+        Sleep(1000);
+        return false;
+    }
+    // 검색어 복사
     strncpy(g_search_keyword, keyword, sizeof(g_search_keyword) - 1);
     g_search_keyword[sizeof(g_search_keyword) - 1] = '\0';
 
+    // 요청 전송
     char request[REQUEST_BUF_SIZE], reply[REPLY_BUF_SIZE];
     snprintf(request, sizeof(request), "MEMO_SEARCH:%s:%s:%s", user_id, field, keyword);
-
+    // 서버 응답 파싱
     if (communicate_with_server(sock, request, reply))
     {
+        // 서버 응답 파싱
         parse_and_cache_memos(reply);
+        // 검색 모드 설정
         g_view_mode = MODE_SEARCH;
         return true;
     }
@@ -421,28 +458,34 @@ static bool prompt_and_execute_search(SOCKET sock, const char *user_id)
 
 void memo_menu_loop(SOCKET sock, const char *logged_in_id)
 {
+    // 요청 버퍼 선언
     char request[REQUEST_BUF_SIZE], reply[REPLY_BUF_SIZE];
+    // 현재 시간 가져오기
     time_t t;
     struct tm tm_now;
-
+    // 현재 년도와 월 가져오기
     t = time(NULL);
     localtime_s(&tm_now, &t);
     int current_year = tm_now.tm_year + 1900;
     int current_month = tm_now.tm_mon + 1;
     int current_page = 0;
     bool needs_update = true;
-    g_view_mode = MODE_MONTHLY; // 함수 진입 시 항상 월별 모드로 초기화
+    // 초기 뷰 모드 설정
+    g_view_mode = MODE_MONTHLY;
 
+    // 메모 메뉴 루프
     while (true)
     {
+        // 데이터 업데이트 필요 시
         if (needs_update)
         {
-            // 월별 모드일 때만 서버에서 월별 데이터를 가져옴
+            // 월별 모드일 때만 서버에서 월별 데이터를 가져옴 (검색 모드에서는 사용하지 않음)
             if (g_view_mode == MODE_MONTHLY)
             {
                 snprintf(request, sizeof(request), "MEMO_LIST_BY_MONTH:%s:%d:%d", logged_in_id, current_year, current_month);
                 if (communicate_with_server(sock, request, reply))
                 {
+                    // 서버 응답 파싱
                     parse_and_cache_memos(reply);
                     current_page = 0;
                 }
@@ -450,21 +493,26 @@ void memo_menu_loop(SOCKET sock, const char *logged_in_id)
             needs_update = false;
         }
 
+        // 화면 표시
         display_ui(current_year, current_month, current_page);
 
+        // 키 입력 처리
         int ch = _getch();
         if (ch == 224 || ch == 0)
         {
             ch = _getch();
+            // 총 페이지 수 계산
             int total_pages = (g_memo_count + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE;
             if (total_pages == 0)
                 total_pages = 1;
 
+            // 키 입력에 따른 동작 분기
             switch (ch)
             {
             case 72: // Up (월 이동은 월별 모드에서만)
                 if (g_view_mode == MODE_MONTHLY)
                 {
+                    // 현재 시간 가져오기
                     t = time(NULL);
                     localtime_s(&tm_now, &t);
                     int real_year = tm_now.tm_year + 1900;
@@ -526,14 +574,27 @@ void memo_menu_loop(SOCKET sock, const char *logged_in_id)
             case '2':
             case '3':
                 if (ch == '1')
-                    add_new_memo(sock, logged_in_id);
-                else if (ch == '2')
-                    update_existing_memo(sock, logged_in_id);
-                else
-                    delete_existing_memo(sock, logged_in_id);
-
-                if (g_view_mode == MODE_MONTHLY)
                 {
+                    add_new_memo(sock, logged_in_id);
+                }
+                else if (ch == '2')
+                {
+                    update_existing_memo(sock, logged_in_id);
+                }
+                else
+                { // '3'
+                    delete_existing_memo(sock, logged_in_id);
+                }
+
+                // 공통 후처리 로직
+                if (g_view_mode == MODE_SEARCH)
+                {
+                    // 검색 모드에서는 현재 검색을 다시 실행하여 목록을 갱신
+                    prompt_and_execute_search(sock, logged_in_id);
+                }
+                else
+                {
+                    // 월별 모드에서는 현재 달로 돌아가 목록 갱신
                     t = time(NULL);
                     localtime_s(&tm_now, &t);
                     current_year = tm_now.tm_year + 1900;
@@ -548,7 +609,7 @@ void memo_menu_loop(SOCKET sock, const char *logged_in_id)
                     {
                         current_page = 0;
                     }
-                    // 검색 후에는 화면을 바로 다시 그리므로 needs_update는 false
+                    needs_update = true;
                 }
                 break;
             }
