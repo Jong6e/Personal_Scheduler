@@ -12,6 +12,8 @@
 #include "memo.h"
 #include "memo_command.h"
 #include <signal.h>
+#include <direct.h>   // for _mkdir
+#include <sys/stat.h> // for stat
 
 #pragma comment(lib, "ws2_32.lib")
 
@@ -52,8 +54,42 @@ void signal_handler(int signum)
     }
 }
 
+// 데이터 저장을 위한 디렉터리를 생성하는 함수
+void create_data_directories()
+{
+    struct stat st = {0};
+
+    // 'data' 디렉터리 확인 및 생성
+    if (stat("data", &st) == -1)
+    {
+        if (_mkdir("data") == 0)
+        {
+            printf("'data' 디렉터리를 생성했습니다.\n");
+        }
+        else
+        {
+            perror("'data' 디렉터리 생성 실패");
+        }
+    }
+
+    // 'data/memo' 디렉터리 확인 및 생성
+    if (stat("data/memo", &st) == -1)
+    {
+        if (_mkdir("data/memo") == 0)
+        {
+            printf("'data/memo' 디렉터리를 생성했습니다.\n");
+        }
+        else
+        {
+            perror("'data/memo' 디렉터리 생성 실패");
+        }
+    }
+}
+
 int main()
 {
+    create_data_directories(); // 데이터 디렉터리 생성
+
     setlocale(LC_ALL, ".UTF8");
     SetConsoleOutputCP(CP_UTF8);
 

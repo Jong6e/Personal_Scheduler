@@ -11,7 +11,7 @@
 // 전역 변수
 static MemoNode *g_memo_list_head = NULL;
 static int g_next_memo_id = 1;
-const char *DATA_DIR = "data/";
+const char *DATA_DIR = "data/memo/";
 
 // 현재 날짜와 시간 가져오기
 static void get_current_datetime(char *datetime_str, int size)

@@ -6,9 +6,10 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
+#define USERS_FILE "data/users.txt"
+
 // 연결 리스트의 헤드 포인터
 static UserNode *user_list_head = NULL;
-const char *USER_FILE_PATH = "data/users.txt";
 
 // 새로운 UserNode를 생성하고 초기화
 UserNode *create_user_node(const char *id, const char *pw)
@@ -30,12 +31,12 @@ UserNode *create_user_node(const char *id, const char *pw)
 // 파일에서 사용자 정보를 읽어와 연결 리스트를 초기화
 void user_init()
 {
-    FILE *file = fopen(USER_FILE_PATH, "r");
+    FILE *file = fopen(USERS_FILE, "r");
     if (file == NULL)
     {
-        printf("[정보] %s 파일이 없어 새로 시작합니다.\n", USER_FILE_PATH);
+        printf("[정보] %s 파일이 없어 새로 시작합니다.\n", USERS_FILE);
         // 파일을 쓰기 모드로 열어 새로 생성
-        FILE *createFile = fopen(USER_FILE_PATH, "w");
+        FILE *createFile = fopen(USERS_FILE, "w");
         if (createFile)
         {
             fclose(createFile);
@@ -168,7 +169,7 @@ bool user_update_password(const char *id, const char *new_pw)
 // 현재 연결 리스트의 모든 사용자 정보를 파일에 저장
 void user_save_to_file()
 {
-    FILE *file = fopen(USER_FILE_PATH, "w");
+    FILE *file = fopen(USERS_FILE, "w");
     if (file == NULL)
     {
         perror("[에러] 사용자 파일 저장 실패");
