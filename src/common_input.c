@@ -103,8 +103,9 @@ bool get_secure_input(char *buffer, int buffer_size, const char *prompt, bool is
                 continue;
             }
 
-            // ID/PW 입력 모드일 때, isprint()로 한글 등 비-ASCII 문자를 차단
-            if (alphanumeric_only && !isprint((unsigned char)ch))
+            // ID/PW 입력 모드일 때, isalnum()으로 영문/숫자만 허용하고,
+            // 그 외의 경우는 isprint()가 false를 반환하는 한글 등 비-ASCII 문자 입력을 허용
+            if (alphanumeric_only && !isalnum((unsigned char)ch))
             {
                 continue;
             }

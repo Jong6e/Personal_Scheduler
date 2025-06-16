@@ -2,6 +2,7 @@
 
 #include "memo_command.h"
 #include "memo.h"
+#include "export_util.h"
 #include "user.h" // For USER_ID_MAX
 #include <stdio.h>
 #include <string.h>
@@ -215,6 +216,69 @@ void handle_memo_command(const char *request, char *reply, int reply_size)
         else
         {
             snprintf(reply, reply_size, "FAIL:검색 필드가 필요합니다.");
+        }
+    }
+    // 메모 다운로드
+    else if (strcmp(command, "DOWNLOAD_SINGLE") == 0)
+    {
+        char *memo_id_str = strtok(NULL, DELIMITER);
+        char *format = strtok(NULL, DELIMITER);
+        if (memo_id_str && format)
+        {
+            int memo_id = atoi(memo_id_str);
+            const Memo *memo = memo_get_by_id_internal(memo_id, user_id);
+            if (memo)
+            {
+                char *exported_string = export_single_memo_to_string(memo, format);
+                if (exported_string)
+                {
+                    snprintf(reply, reply_size, "OK:%s", exported_string);
+                    free(exported_string);
+                }
+                else
+                {
+                    snprintf(reply, reply_size, "FAIL:지원하지 않는 포맷입니다.");
+                }
+            }
+            else
+            {
+                snprintf(reply, reply_size, "FAIL:메모를 찾을 수 없습니다.");
+            }
+        }
+        else
+        {
+            snprintf(reply, reply_size, "FAIL:메모 ID 또는 포맷이 누락되었습니다.");
+        }
+    }
+    // 전체 메모 다운로드
+    else if (strcmp(command, "DOWNLOAD_ALL") == 0)
+    {
+        char *format = strtok(NULL, DELIMITER);
+        if (format)
+        {
+            Memo user_memos[1024]; // 최대 1024개 메모 가정
+            int memo_count = memo_get_all_for_user_internal(user_id, user_memos, 1024);
+            if (memo_count > 0)
+            {
+                char *exported_string = export_all_memos_to_string(user_memos, memo_count, format);
+                if (exported_string)
+                {
+                    snprintf(reply, reply_size, "OK:%s", exported_string);
+                    free(exported_string);
+                }
+                else
+                {
+                    snprintf(reply, reply_size, "FAIL:지원하지 않는 포맷입니다.");
+                }
+            }
+            else
+            {
+                snprintf(reply, reply_size, "FAIL:다운로드할 메모가 없습니다.");
+            }
+        }
+        else
+        {
+            snprintf(reply, reply_size, "FAIL:포맷이 누락되었습니다.");
         }
     }
     // 알 수 없는 명령어

@@ -479,3 +479,30 @@ bool memo_search(const char *user_id, const char *field, const char *keyword, ch
     }
     return true;
 }
+
+// [내부용] ID로 메모리에서 직접 메모 구조체 포인터를 찾는 함수
+const Memo *memo_get_by_id_internal(int memo_id, const char *user_id)
+{
+    MemoNode *node = find_memo_node(memo_id, user_id);
+    if (node)
+    {
+        return &node->memo;
+    }
+    return NULL;
+}
+
+// [내부용] 특정 사용자의 모든 메모를 배열 형태로 가져오는 함수
+int memo_get_all_for_user_internal(const char *user_id, Memo *memo_array, int max_count)
+{
+    int count = 0;
+    MemoNode *current = g_memo_list_head;
+    while (current != NULL && count < max_count)
+    {
+        if (strcmp(current->memo.user_id, user_id) == 0)
+        {
+            memo_array[count++] = current->memo;
+        }
+        current = current->next;
+    }
+    return count;
+}

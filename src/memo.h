@@ -51,4 +51,10 @@ bool memo_search(const char *user_id, const char *field, const char *keyword, ch
 // 모든 메모를 파일에 저장
 void memo_save_all_to_files();
 
+// [내부용] ID로 메모리에서 직접 메모 구조체 포인터를 찾는 함수
+const Memo *memo_get_by_id_internal(int memo_id, const char *user_id);
+
+// [내부용] 특정 사용자의 모든 메모를 배열 형태로 가져오는 함수
+int memo_get_all_for_user_internal(const char *user_id, Memo *memo_array, int max_count);
+
 #endif // MEMO_H

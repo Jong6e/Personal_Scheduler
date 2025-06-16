@@ -4,7 +4,7 @@
         {
             "label": "Build Server",
             "type": "shell",
-            "command": "chcp 65001 && gcc -o bin/ps_server.exe src/ps_server.c src/user.c src/user_command.c src/memo.c src/memo_command.c -lws2_32",
+            "command": "chcp 65001 && gcc -o bin/ps_server.exe src/ps_server.c src/user.c src/user_command.c src/memo.c src/memo_command.c src/export_util.c -lws2_32",
             "group": "build",
             "presentation": {
                 "reveal": "always",

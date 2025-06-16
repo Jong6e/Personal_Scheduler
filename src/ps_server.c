@@ -170,7 +170,9 @@ DWORD WINAPI handle_client(LPVOID client_socket)
         printf("[서버] 클라이언트 %llu 수신: %s\n", sock, buffer);
 
         // 명령어에 따라 핸들러 분기
-        if (strncmp(buffer, "MEMO_", 5) == 0)
+        if (strncmp(buffer, "MEMO_", 5) == 0 ||
+            strncmp(buffer, "DOWNLOAD_ALL", 12) == 0 ||
+            strncmp(buffer, "DOWNLOAD_SINGLE", 15) == 0)
         {
             handle_memo_command(buffer, reply, sizeof(reply));
         }

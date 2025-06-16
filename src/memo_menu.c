@@ -12,6 +12,7 @@
 #define REPLY_BUF_SIZE 65536
 #define ITEMS_PER_PAGE 10
 #define CLIENT_MEMO_CACHE_SIZE 100
+#define MAX_MEMOS_PER_PAGE 10
 
 // 화면 모드 관리
 typedef enum
@@ -25,6 +26,43 @@ static Memo g_memo_cache[CLIENT_MEMO_CACHE_SIZE];       // 서버에서 받아�
 static int g_memo_count = 0;                            // 캐시된 메모의 수
 static ViewMode g_view_mode = MODE_MONTHLY;             // 현재 화면 모드
 static char g_search_keyword[MAX_MEMO_TITLE_LEN] = {0}; // 현재 검색어
+
+// 함수 원형 선언
+static void display_ui(int year, int month, int page);
+static void fetch_and_display_memos(SOCKET sock, const char *user_id, int page);
+static void view_memo_details(SOCKET sock, const char *user_id);
+static void add_new_memo(SOCKET sock, const char *user_id);
+static void update_existing_memo(SOCKET sock, const char *user_id);
+static void delete_existing_memo(SOCKET sock, const char *user_id);
+static bool prompt_and_execute_search(SOCKET sock, const char *user_id);
+static void handle_download_process(SOCKET sock, const char *user_id, int memo_id);
+
+// 문자열의 앞뒤 공백을 제거하는 헬퍼 함수
+static void trim_whitespace(char *str)
+{
+    if (!str)
+        return;
+
+    char *start = str;
+    // 앞쪽 공백 건너뛰기
+    while (isspace((unsigned char)*start))
+    {
+        start++;
+    }
+
+    // 문자열을 앞으로 이동
+    memmove(str, start, strlen(start) + 1);
+
+    // 뒤쪽 공백 제거
+    char *end = str + strlen(str) - 1;
+    while (end > str && isspace((unsigned char)*end))
+    {
+        end--;
+    }
+
+    // 새 끝 설정
+    *(end + 1) = '\0';
+}
 
 // 서버와 통신
 static bool communicate_with_server(SOCKET sock, const char *request, char *reply)
@@ -326,10 +364,14 @@ static void view_memo_details(SOCKET sock, const char *user_id)
             sscanf(p_reply, "%*[^\t]\t%[^\t]\t%[^\t]\t%[^\t]\t%[^\n]", created_at, updated_at, title, content);
 
             display_detail_template(title, created_at, updated_at, content);
-            printf("Enter: 뒤로가기\n");
+            printf("D: 메모 다운로드 | Enter: 뒤로가기\n");
 
-            while (_getch() != KEY_ENTER)
-                ; // Enter를 누를 때까지 대기
+            int ch = _getch();
+            if (ch == 'd' || ch == 'D')
+            {
+                int memo_id = atoi(memo_id_str);
+                handle_download_process(sock, user_id, memo_id);
+            }
         }
         else
         {
@@ -484,9 +526,13 @@ static bool prompt_and_execute_search(SOCKET sock, const char *user_id)
         Sleep(1000);
         return false;
     }
+
+    // 입력된 키워드의 앞뒤 공백 제거
+    trim_whitespace(keyword);
+
     if (strlen(keyword) == 0)
     {
-        printf("\n[알림] 검색이 취소되었습니다.\n");
+        printf("\n[오류] 검색어는 비워둘 수 없습니다. 공백만 입력할 수 없습니다.\n");
         Sleep(1000);
         return false;
     }
@@ -507,6 +553,123 @@ static bool prompt_and_execute_search(SOCKET sock, const char *user_id)
         return true;
     }
     return false;
+}
+
+// 다운로드 과정을 처리하는 핵심 핸들러 함수
+static void handle_download_process(SOCKET sock, const char *user_id, int memo_id)
+{
+    clear_screen();
+    printf("--- 메모 다운로드 ---\n\n");
+
+    // 1. 포맷 선택
+    printf("다운로드할 파일 형식을 선택하세요.\n");
+    char choice = get_single_choice_input("1: Markdown (.md)\n2: 텍스트 (.txt)\n3: JSON (.json)\n4: XML (.xml)\n5: CSV (.csv)\n", "12345");
+    if (choice == KEY_ESC)
+        return;
+
+    const char *format_str;
+    const char *ext;
+    if (choice == '1')
+    {
+        format_str = "MD";
+        ext = "md";
+    }
+    else if (choice == '2')
+    {
+        format_str = "TXT";
+        ext = "txt";
+    }
+    else if (choice == '3')
+    {
+        format_str = "JSON";
+        ext = "json";
+    }
+    else if (choice == '4')
+    {
+        format_str = "XML";
+        ext = "xml";
+    }
+    else
+    { // choice == '5'
+        format_str = "CSV";
+        ext = "csv";
+    }
+
+    // 2. 파일명 생성
+    char filepath[MAX_PATH];
+    time_t t = time(NULL);
+    struct tm now;
+    localtime_s(&now, &t);
+
+    if (memo_id != -1) // 개별 메모 다운로드
+    {
+        snprintf(filepath, sizeof(filepath), "downloads/memo_%s_%d_%d%02d%02d.%s", user_id, memo_id, now.tm_year + 1900, now.tm_mon + 1, now.tm_mday, ext);
+    }
+    else
+    {
+        // 이 로직은 현재 사용되지 않지만, 만약을 위해 유지합니다.
+        snprintf(filepath, sizeof(filepath), "downloads/allmemo_%s_%d%02d%02d.%s", user_id, now.tm_year + 1900, now.tm_mon + 1, now.tm_mday, ext);
+    }
+
+    // 3. 파일 존재 여부 확인
+    FILE *file_check;
+    if (fopen_s(&file_check, filepath, "r") == 0)
+    {
+        fclose(file_check);
+        printf("\n[경고] '%s' 파일이 이미 존재합니다.", filepath);
+        char overwrite_choice = get_single_choice_input(" 덮어쓰시겠습니까? (Y/N)", "yYnN");
+        if (overwrite_choice == 'n' || overwrite_choice == 'N' || overwrite_choice == KEY_ESC)
+        {
+            printf("\n[알림] 다운로드가 취소되었습니다.\n");
+            Sleep(1000);
+            return;
+        }
+    }
+
+    // 4. 최종 확인
+    printf("\n'downloads' 폴더에 '%s'(으)로 저장하시겠습니까?", filepath + strlen("downloads/"));
+    choice = get_single_choice_input(" (Y/N)", "yYnN");
+    if (choice == 'n' || choice == 'N' || choice == KEY_ESC)
+    {
+        printf("\n[알림] 다운로드가 취소되었습니다.\n");
+        Sleep(1000);
+        return;
+    }
+
+    // 5. 서버 요청
+    char request[REQUEST_BUF_SIZE], reply[REPLY_BUF_SIZE];
+    if (memo_id == -1)
+    {
+        snprintf(request, sizeof(request), "DOWNLOAD_ALL:%s:%s", user_id, format_str);
+    }
+    else
+    {
+        snprintf(request, sizeof(request), "DOWNLOAD_SINGLE:%s:%d:%s", user_id, memo_id, format_str);
+    }
+
+    printf("\n다운로드 중...\n");
+    if (!communicate_with_server(sock, request, reply) || strncmp(reply, "OK:", 3) != 0)
+    {
+        printf("\n[오류] 다운로드에 실패했습니다: %s\n", reply);
+        Sleep(1500);
+        return;
+    }
+
+    // 6. 데이터 수신 및 파일 저장
+    const char *data_to_save = reply + 3;
+    FILE *file;
+    if (fopen_s(&file, filepath, "w") != 0 || file == NULL)
+    {
+        printf("\n[오류] 파일을 생성할 수 없습니다.\n");
+        Sleep(1000);
+        return;
+    }
+    fprintf(file, "%s", data_to_save);
+    fclose(file);
+
+    // 7. 결과 안내
+    printf("\n[성공] 다운로드가 완료되었습니다. (%s)\n", filepath);
+    Sleep(1500);
 }
 
 void memo_menu_loop(SOCKET sock, const char *logged_in_id)
@@ -624,38 +787,18 @@ void memo_menu_loop(SOCKET sock, const char *logged_in_id)
                 needs_update = true; // 상세보기 후, 화면을 새로고침
                 break;
             case '1':
-            case '2':
-            case '3':
-                if (ch == '1')
-                {
-                    add_new_memo(sock, logged_in_id);
-                }
-                else if (ch == '2')
-                {
-                    update_existing_memo(sock, logged_in_id);
-                }
-                else
-                { // '3'
-                    delete_existing_memo(sock, logged_in_id);
-                }
-
-                // 공통 후처리 로직
-                if (g_view_mode == MODE_SEARCH)
-                {
-                    // 검색 모드에서는 현재 검색을 다시 실행하여 목록을 갱신
-                    prompt_and_execute_search(sock, logged_in_id);
-                }
-                else
-                {
-                    // 월별 모드에서는 현재 달로 돌아가 목록 갱신
-                    t = time(NULL);
-                    localtime_s(&tm_now, &t);
-                    current_year = tm_now.tm_year + 1900;
-                    current_month = tm_now.tm_mon + 1;
-                }
+                add_new_memo(sock, logged_in_id);
                 needs_update = true;
                 break;
-            case '4': // 검색 (월별 모드에서만 활성화)
+            case '2':
+                update_existing_memo(sock, logged_in_id);
+                needs_update = true;
+                break;
+            case '3':
+                delete_existing_memo(sock, logged_in_id);
+                needs_update = true;
+                break;
+            case '4': // 월별 모드에서만 '검색'으로 동작
                 if (g_view_mode == MODE_MONTHLY)
                 {
                     if (prompt_and_execute_search(sock, logged_in_id))
