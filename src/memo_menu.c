@@ -340,39 +340,92 @@ static void view_memo_details(SOCKET sock, const char *user_id)
     }
 }
 
-// 기존 메모 수정 기능
+// 메모 수정
 static void update_existing_memo(SOCKET sock, const char *user_id)
 {
-    char memo_id_str[10], new_content[MAX_MEMO_CONTENT_LEN];
-    char request[REQUEST_BUF_SIZE], reply[REPLY_BUF_SIZE];
-    int memo_id;
+    char request[REQUEST_BUF_SIZE];
+    char reply[REPLY_BUF_SIZE];
+    char id_str[10];
 
-    if (!get_secure_input(memo_id_str, sizeof(memo_id_str), "수정할 메모 ID", false, true))
-        return;
-    memo_id = atoi(memo_id_str);
-
-    // TODO: ID 유효성 검사 (g_memo_cache에 존재하는지)
-
-    if (!get_line_input(new_content, sizeof(new_content), "새 내용"))
-        return;
-
-    if (strlen(new_content) == 0)
+    // 1. 수정할 메모 ID 입력 받기
+    if (!get_line_input(id_str, sizeof(id_str), "수정할 메모의 ID를 입력하세요"))
     {
-        printf("[클라이언트] 내용은 비워둘 수 없습니다.\n");
+        return; // ESC 입력 시 복귀
+    }
+    int memo_id = atoi(id_str);
+    if (memo_id == 0)
+    {
+        printf("\n[오류] 유효하지 않은 ID입니다.\n");
         Sleep(1000);
         return;
     }
 
+    // 2. 서버에 기존 메모 내용 요청 (MEMO_VIEW)
+    snprintf(request, sizeof(request), "MEMO_VIEW:%s:%d", user_id, memo_id);
+    if (!communicate_with_server(sock, request, reply) || strncmp(reply, "OK:", 3) != 0)
+    {
+        printf("\n[오류] 메모를 불러오는 데 실패했습니다: %s\n", reply);
+        Sleep(1000);
+        return;
+    }
+
+    // 3. 응답 파싱하여 기존 내용 추출
+    char *context = NULL;
+    strtok_s(reply, ":", &context);                 // "OK" 부분 무시
+    char *memo_data = strtok_s(NULL, "", &context); // 나머지 전체 데이터
+    if (memo_data == NULL)
+    {
+        printf("\n[오류] 서버 응답이 올바르지 않습니다.\n");
+        Sleep(1000);
+        return;
+    }
+
+    char *inner_context = NULL;
+    strtok_s(memo_data, "\t", &inner_context); // id
+    char *created_at = strtok_s(NULL, "\t", &inner_context);
+    char *updated_at = strtok_s(NULL, "\t", &inner_context);
+    char *original_title = strtok_s(NULL, "\t", &inner_context);
+    char *original_content = strtok_s(NULL, "\n", &inner_context);
+
+    if (original_content == NULL)
+    {
+        original_content = original_title; // 제목만 있는 경우
+    }
+
+    // 4. 화면 정리 및 기존 내용 표시
+    clear_screen();
+    printf("--- 메모 수정 ---\n");
+    printf("기존 제목: %s (제목은 변경되지 않습니다)\n", original_title);
+    printf("---------------------------------\n");
+    printf("기존 내용:\n%s\n", original_content);
+    printf("---------------------------------\n\n");
+
+    // 5. 새로운 내용 입력 받기 (add_new_memo와 유사한 방식)
+    char new_content[MAX_MEMO_CONTENT_LEN];
+    if (!get_line_input(new_content, sizeof(new_content), "새로운 내용을 입력하세요"))
+    {
+        return; // ESC 입력 시 복귀
+    }
+
+    if (strlen(new_content) == 0)
+    {
+        printf("\n[오류] 내용은 비워둘 수 없습니다.\n");
+        Sleep(1000);
+        return;
+    }
+
+    // 6. 서버에 수정 요청 (MEMO_UPDATE)
+    // 참고: 서버의 MEMO_UPDATE는 현재 '내용'만 받도록 되어 있음. 제목을 포함하려면 프로토콜 변경 필요.
     snprintf(request, sizeof(request), "MEMO_UPDATE:%s:%d:%s", user_id, memo_id, new_content);
     if (communicate_with_server(sock, request, reply) && strncmp(reply, "OK", 2) == 0)
     {
-        printf("[클라이언트] %s\n", reply + 3);
+        printf("\n[성공] 메모가 수정되었습니다.\n");
     }
     else
     {
-        printf("[클라이언트] %s\n", reply + 5);
+        printf("\n[오류] 메모 수정에 실패했습니다: %s\n", reply);
     }
-    Sleep(1000); // 1초 대기 후 자동으로 메뉴로 복귀
+    Sleep(1000);
 }
 
 // 삭제 시 확인 절차 추가

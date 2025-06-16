@@ -21,7 +21,7 @@ void clear_screen()
 // ID/PW, 일반 텍스트 등 ESC/백스페이스 처리가 필요한 모든 입력을 처리하는 핵심 함수 (비밀번호 입력 시 마스킹 처리)
 bool get_secure_input(char *buffer, int buffer_size, const char *prompt, bool is_password, bool alphanumeric_only)
 {
-    printf("%s (ESC:취소): ", prompt);
+    printf("%s (ESC:취소):\n", prompt);
     // 입력 버퍼 초기화
     int i = 0;
     buffer[0] = '\0';
@@ -53,9 +53,31 @@ bool get_secure_input(char *buffer, int buffer_size, const char *prompt, bool is
         {
             if (i > 0)
             {
-                i--;
+                // UTF-8 문자를 글자 단위로 올바르게 지우기 위한 로직
+                int bytes_to_erase = 1;
+                char *ptr = &buffer[i - 1]; // 버퍼의 마지막 바이트를 가리킴
+
+                // 마지막 바이트부터 거꾸로 탐색하여 문자의 시작점을 찾음
+                // UTF-8 연속 바이트는 10xxxxxx 형식임
+                while (ptr > buffer && (*ptr & 0xC0) == 0x80)
+                {
+                    ptr--;
+                    bytes_to_erase++;
+                }
+
+                // 버퍼에서 해당 글자의 바이트 수만큼 제거
+                i -= bytes_to_erase;
                 buffer[i] = '\0';
-                printf("\b \b");
+
+                // 콘솔 화면에서도 지움 (한글 등 멀티바이트 문자는 2칸 차지)
+                if (bytes_to_erase > 1)
+                {
+                    printf("\b\b  \b\b");
+                }
+                else
+                {
+                    printf("\b \b");
+                }
             }
         }
         // 그 외 키 입력 시
@@ -65,6 +87,12 @@ bool get_secure_input(char *buffer, int buffer_size, const char *prompt, bool is
             if (ch == 0xE0 || ch == 0x00)
             {
                 _getch();
+                continue;
+            }
+
+            // 첫 글자로 공백 입력을 방지 (ID/PW가 아닌 일반 텍스트 입력 시)
+            if (i == 0 && !alphanumeric_only && isspace((unsigned char)ch))
+            {
                 continue;
             }
 
@@ -100,7 +128,7 @@ bool get_line_input(char *buffer, int buffer_size, const char *prompt)
 // 단일 키 입력을 받아 유효성을 검사하는 메뉴 선택 전용 함수
 char get_single_choice_input(const char *prompt, const char *valid_choices)
 {
-    printf("%s (ESC:취소): ", prompt);
+    printf("%s (ESC:취소) ", prompt);
 
     while (true)
     {

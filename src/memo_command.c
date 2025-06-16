@@ -6,8 +6,49 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <ctype.h>
 
 #define DELIMITER ":"
+
+// 문자열 앞쪽의 모든 비정상 문자(공백, 제어문자, 깨진 바이트)를 제거하는 강화된 함수
+static char *trim_leading_garbage(char *str)
+{
+    if (str == NULL)
+    {
+        return NULL;
+    }
+
+    // 정상적인 출력 가능 문자를 만날 때까지 포인터를 이동
+    while (*str != '\0')
+    {
+        unsigned char c = *str;
+
+        // 표준 공백 문자인 경우 건너뛰기
+        if (isspace(c))
+        {
+            str++;
+            continue;
+        }
+
+        // ASCII 제어 문자인 경우 건너뛰기 (0x20 미만)
+        if (c < 0x20)
+        {
+            str++;
+            continue;
+        }
+
+        // UTF-8 깨진 문자(U+FFFD)도 예방적으로 확인
+        if (c == 0xEF && (unsigned char)str[1] == 0xBF && (unsigned char)str[2] == 0xBD)
+        {
+            str += 3;
+            continue;
+        }
+
+        // 위 조건에 해당하지 않는 '정상적인' 문자를 만나면 루프 종료
+        break;
+    }
+    return str;
+}
 
 // 클라이언트로부터 받은 메모 관련 명령을 처리하고 응답 문자열을 생성
 void handle_memo_command(const char *request, char *reply, int reply_size)
@@ -69,7 +110,12 @@ void handle_memo_command(const char *request, char *reply, int reply_size)
         if (title)
         {
             char *content = title + strlen(title) + 1;
-            if (*content && memo_add(user_id, title, content))
+
+            // 제목과 내용의 앞쪽 공백 및 깨진 문자 제거
+            title = trim_leading_garbage(title);
+            content = trim_leading_garbage(content);
+
+            if (content && *content && memo_add(user_id, title, content))
             {
                 memo_save_all_to_files(); // 변경사항 즉시 저장
                 snprintf(reply, reply_size, "OK:메모가 성공적으로 추가되었습니다.");
@@ -109,7 +155,11 @@ void handle_memo_command(const char *request, char *reply, int reply_size)
         {
             char *content = memo_id_str + strlen(memo_id_str) + 1;
             int memo_id = atoi(memo_id_str);
-            if (*content && memo_update(memo_id, user_id, content))
+
+            // 내용의 앞쪽 공백 및 깨진 문자 제거
+            content = trim_leading_garbage(content);
+
+            if (content && *content && memo_update(memo_id, user_id, content))
             {
                 memo_save_all_to_files(); // 변경사항 즉시 저장
                 snprintf(reply, reply_size, "OK:메모가 성공적으로 수정되었습니다.");
