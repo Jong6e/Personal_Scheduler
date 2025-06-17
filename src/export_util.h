@@ -15,4 +15,4 @@ char *export_single_memo_to_string(const Memo *memo, const char *format);
 // 호출자는 반환된 문자열을 free() 해주어야 함
 char *export_all_memos_to_string(const Memo *memo_list, int memo_count, const char *format);
 
-#endif // EXPORT_UTIL_H
+#endif

@@ -11,4 +11,4 @@ void exit_program(SOCKET sock);
 // 로그인 이전 사용자를 위한 메뉴
 void user_menu_loop(SOCKET sock);
 
-#endif // USER_MENU_H
+#endif

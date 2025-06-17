@@ -4,7 +4,7 @@
         {
             "label": "Build Server",
             "type": "shell",
-            "command": "chcp 65001 && gcc -o bin/ps_server.exe src/ps_server.c src/user.c src/user_command.c src/memo.c src/memo_command.c src/export_util.c -lws2_32",
+            "command": "chcp 65001 && gcc -o ps_server.exe src/ps_server.c src/user.c src/user_command.c src/memo.c src/memo_command.c src/export_util.c -lws2_32",
             "group": "build",
             "presentation": {
                 "reveal": "always",
@@ -14,7 +14,7 @@
         {
             "label": "Build Client",
             "type": "shell",
-            "command": "chcp 65001 && gcc -o bin/ps_client.exe src/ps_client.c src/user_menu.c src/common_input.c src/memo_menu.c src/main_menu.c -lws2_32",
+            "command": "chcp 65001 && gcc -o ps_client.exe src/ps_client.c src/user_menu.c src/common_input.c src/memo_menu.c src/main_menu.c -lws2_32",
             "group": "build",
             "presentation": {
                 "reveal": "always",
@@ -24,15 +24,18 @@
         {
             "label": "Run Server",
             "type": "shell",
-            "command": "start \"PS Server\" /D \"%cd%\" cmd /k \"chcp 65001 && .\\bin\\ps_server.exe\"",
+            "command": "start \"PS Server\" /D \"%cd%\" cmd /k \"chcp 65001 && .\\ps_server.exe\"",
             "dependsOn": [
                 "Build Server"
+            ],
+            "problemMatcher": [
+                "$gcc"
             ]
         },
         {
             "label": "Run Client",
             "type": "shell",
-            "command": "start \"PS Client\" /D \"%cd%\" cmd /k \"chcp 65001 && .\\bin\\ps_client.exe\"",
+            "command": "start \"PS Client\" /D \"%cd%\" cmd /k \"chcp 65001 && .\\ps_client.exe\"",
             "dependsOn": [
                 "Build Client"
             ]

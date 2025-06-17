@@ -5,8 +5,11 @@
 
 #include <stdbool.h>
 
-#define MAX_ID_LEN 50
-#define MAX_PW_LEN 50
+// 사용자 ID/PW 길이 제한
+#define MIN_ID_LEN 1
+#define MAX_ID_LEN 20
+#define MIN_PW_LEN 4
+#define MAX_PW_LEN 20
 #define MAX_USER 100
 
 // 사용자 정보를 담는 구조체
@@ -24,12 +27,13 @@ typedef struct UserNode
 } UserNode;
 
 // 함수 선언
-void user_init();                                              // 사용자 목록 초기화
-void user_cleanup();                                           // 동적 할당된 메모리 해제
-bool user_add(const char *id, const char *pw);                 // 사용자 추가
-User *user_find_by_id(const char *id);                         // ID로 사용자 찾기
-bool user_delete_by_id(const char *id);                        // ID로 사용자 삭제
-bool user_update_password(const char *id, const char *new_pw); // 비밀번호 변경
+void user_init();    // 사용자 목록 초기화
+void user_cleanup(); // 동적 할당된 메모리 해제
+// 사용자 추가
+bool user_add(const char *id, const char *pw);                 // ID로 사용자 찾기
+User *user_find_by_id(const char *id);                         // ID로 사용자 삭제
+bool user_delete_by_id(const char *id);                        // 비밀번호 변경
+bool user_update_password(const char *id, const char *new_pw); // 파일에 사용자 목록 저장
 void user_save_to_file();                                      // 파일에 사용자 목록 저장
 
-#endif // USER_H
+#endif

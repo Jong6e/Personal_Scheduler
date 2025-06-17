@@ -7,6 +7,9 @@
 #include <conio.h>
 #include <ctype.h>
 #include <time.h>
+#include <direct.h>   // for _mkdir
+#include <sys/stat.h> // for stat
+#include <windows.h>  // GetModuleFileName 사용
 
 #define REQUEST_BUF_SIZE 2048
 #define REPLY_BUF_SIZE 65536
@@ -28,14 +31,14 @@ static ViewMode g_view_mode = MODE_MONTHLY;             // 현재 화면 모드
 static char g_search_keyword[MAX_MEMO_TITLE_LEN] = {0}; // 현재 검색어
 
 // 함수 원형 선언
-static void display_ui(int year, int month, int page);
-static void fetch_and_display_memos(SOCKET sock, const char *user_id, int page);
-static void view_memo_details(SOCKET sock, const char *user_id);
-static void add_new_memo(SOCKET sock, const char *user_id);
-static void update_existing_memo(SOCKET sock, const char *user_id);
-static void delete_existing_memo(SOCKET sock, const char *user_id);
-static bool prompt_and_execute_search(SOCKET sock, const char *user_id);
-static void handle_download_process(SOCKET sock, const char *user_id, int memo_id);
+static void display_ui(int year, int month, int page);                              // 화면 관련 함수
+static void fetch_and_display_memos(SOCKET sock, const char *user_id, int page);    // 메모 관련 함수
+static void view_memo_details(SOCKET sock, const char *user_id);                    // 메모 상세보기 함수
+static void add_new_memo(SOCKET sock, const char *user_id);                         // 메모 추가 함수
+static void update_existing_memo(SOCKET sock, const char *user_id);                 // 메모 수정 함수
+static void delete_existing_memo(SOCKET sock, const char *user_id);                 // 메모 삭제 함수
+static bool prompt_and_execute_search(SOCKET sock, const char *user_id);            // 검색 관련 함수
+static void handle_download_process(SOCKET sock, const char *user_id, int memo_id); // 다운로드 관련 함수
 
 // 문자열의 앞뒤 공백을 제거하는 헬퍼 함수
 static void trim_whitespace(char *str)
@@ -103,13 +106,13 @@ static void parse_and_cache_memos(char *data)
             // 메모 데이터 저장
             Memo *m = &g_memo_cache[g_memo_count];
             m->id = atoi(id_str);
-
+            // 작성일시 저장
             strncpy(m->created_at, created_at_str, MAX_DATETIME_LEN - 1);
             m->created_at[MAX_DATETIME_LEN - 1] = '\0';
-
+            // 수정일시 저장
             strncpy(m->updated_at, updated_at_str, MAX_DATETIME_LEN - 1);
             m->updated_at[MAX_DATETIME_LEN - 1] = '\0';
-
+            // 제목 저장
             strncpy(m->title, title_str, MAX_MEMO_TITLE_LEN - 1);
             m->title[MAX_MEMO_TITLE_LEN - 1] = '\0';
 
@@ -226,6 +229,7 @@ static void display_ui(int year, int month, int page)
         {
             printf("                                     이 달에 작성된 메모가 없습니다.\n");
         }
+        // 검색 모드일 때
         else
         {
             printf("                                       검색 결과가 없습니다.\n");
@@ -286,9 +290,8 @@ static void display_ui(int year, int month, int page)
         printf("1: 추가 | 2: 수정 | 3: 삭제 | 4: 검색 | ESC: 뒤로가기\n");
     }
     // 검색 모드일 때
-    else // MODE_SEARCH
+    else
     {
-        // 검색 모드 표시
         printf("Page %d/%d | ←→: 페이지 이동 | Enter: 조회 | ESC: 검색 종료\n", page + 1, total_pages);
         printf("1: 추가 | 2: 수정 | 3: 삭제\n");
     }
@@ -354,27 +357,30 @@ static void view_memo_details(SOCKET sock, const char *user_id)
     // 메모 ID 입력받기
     if (get_secure_input(memo_id_str, sizeof(memo_id_str), "\n조회할 메모 ID", false, true))
     {
+        // 서버에 메모 상세 요청
         snprintf(request, sizeof(request), "MEMO_VIEW:%s:%s", user_id, memo_id_str);
         if (communicate_with_server(sock, request, reply) && strncmp(reply, "OK:", 3) == 0)
         {
             // 서버 응답 형식: OK:id\tcreated_at\tupdated_at\ttitle\tcontent
             char *p_reply = reply + 3;
             char created_at[MAX_DATETIME_LEN], updated_at[MAX_DATETIME_LEN], title[MAX_MEMO_TITLE_LEN], content[MAX_MEMO_CONTENT_LEN];
-
+            // 서버 응답 파싱
             sscanf(p_reply, "%*[^\t]\t%[^\t]\t%[^\t]\t%[^\t]\t%[^\n]", created_at, updated_at, title, content);
-
+            // 상세보기 템플릿 표시
             display_detail_template(title, created_at, updated_at, content);
             printf("D: 메모 다운로드 | Enter: 뒤로가기\n");
-
+            // 메모 다운로드 또는 뒤로가기 선택
             int ch = _getch();
             if (ch == 'd' || ch == 'D')
             {
+                // 메모 다운로드 처리
                 int memo_id = atoi(memo_id_str);
                 handle_download_process(sock, user_id, memo_id);
             }
         }
         else
         {
+            // 서버 응답 출력
             printf("%s\n", reply);
             printf("계속하려면 아무 키나 누르세요...");
             _getch();
@@ -394,24 +400,25 @@ static void update_existing_memo(SOCKET sock, const char *user_id)
     {
         return; // ESC 입력 시 복귀
     }
+    // 메모 ID 변환
     int memo_id = atoi(id_str);
+    // 메모 ID 유효성 검사
     if (memo_id == 0)
     {
         printf("\n[오류] 유효하지 않은 ID입니다.\n");
         Sleep(1000);
         return;
     }
-
-    // 2. 서버에 기존 메모 내용 요청 (MEMO_VIEW)
+    // 서버에 기존 메모 내용 요청 (MEMO_VIEW)
     snprintf(request, sizeof(request), "MEMO_VIEW:%s:%d", user_id, memo_id);
+    // 서버 응답 확인
     if (!communicate_with_server(sock, request, reply) || strncmp(reply, "OK:", 3) != 0)
     {
         printf("\n[오류] 메모를 불러오는 데 실패했습니다: %s\n", reply);
         Sleep(1000);
         return;
     }
-
-    // 3. 응답 파싱하여 기존 내용 추출
+    // 응답 파싱하여 기존 내용 추출
     char *context = NULL;
     strtok_s(reply, ":", &context);                 // "OK" 부분 무시
     char *memo_data = strtok_s(NULL, "", &context); // 나머지 전체 데이터
@@ -421,7 +428,7 @@ static void update_existing_memo(SOCKET sock, const char *user_id)
         Sleep(1000);
         return;
     }
-
+    // 응답 파싱하여 기존 내용 추출
     char *inner_context = NULL;
     strtok_s(memo_data, "\t", &inner_context); // id
     char *created_at = strtok_s(NULL, "\t", &inner_context);
@@ -433,31 +440,27 @@ static void update_existing_memo(SOCKET sock, const char *user_id)
     {
         original_content = original_title; // 제목만 있는 경우
     }
-
-    // 4. 화면 정리 및 기존 내용 표시
+    // 화면 정리 및 기존 내용 표시
     clear_screen();
     printf("--- 메모 수정 ---\n");
     printf("기존 제목: %s (제목은 변경되지 않습니다)\n", original_title);
     printf("---------------------------------\n");
     printf("기존 내용:\n%s\n", original_content);
     printf("---------------------------------\n\n");
-
-    // 5. 새로운 내용 입력 받기 (add_new_memo와 유사한 방식)
+    // 새로운 내용 입력 받기 (add_new_memo와 유사한 방식)
     char new_content[MAX_MEMO_CONTENT_LEN];
     if (!get_line_input(new_content, sizeof(new_content), "새로운 내용을 입력하세요"))
     {
         return; // ESC 입력 시 복귀
     }
-
+    // 내용 유효성 검사
     if (strlen(new_content) == 0)
     {
         printf("\n[오류] 내용은 비워둘 수 없습니다.\n");
         Sleep(1000);
         return;
     }
-
-    // 6. 서버에 수정 요청 (MEMO_UPDATE)
-    // 참고: 서버의 MEMO_UPDATE는 현재 '내용'만 받도록 되어 있음. 제목을 포함하려면 프로토콜 변경 필요.
+    // 서버에 수정 요청 (MEMO_UPDATE)
     snprintf(request, sizeof(request), "MEMO_UPDATE:%s:%d:%s", user_id, memo_id, new_content);
     if (communicate_with_server(sock, request, reply) && strncmp(reply, "OK", 2) == 0)
     {
@@ -476,13 +479,12 @@ static void delete_existing_memo(SOCKET sock, const char *user_id)
     char memo_id_str[10];
     char request[REQUEST_BUF_SIZE], reply[REPLY_BUF_SIZE];
     int memo_id;
-
+    // 메모 ID 입력받기
     if (!get_secure_input(memo_id_str, sizeof(memo_id_str), "삭제할 메모 ID", false, true))
         return;
     memo_id = atoi(memo_id_str);
 
-    // TODO: ID 유효성 검사
-
+    // 서버에 메모 삭제 요청
     snprintf(request, sizeof(request), "MEMO_DELETE:%s:%d", user_id, memo_id);
     if (communicate_with_server(sock, request, reply) && strncmp(reply, "OK", 2) == 0)
     {
@@ -498,38 +500,37 @@ static void delete_existing_memo(SOCKET sock, const char *user_id)
 // 검색을 요청하고 실행하는 새로운 함수
 static bool prompt_and_execute_search(SOCKET sock, const char *user_id)
 {
+    // 변수 선언
     char choice;
     char keyword[MAX_MEMO_TITLE_LEN];
     const char *field;
-
+    // 검색 기준 입력받기
     printf("\n");
-
     choice = get_single_choice_input("검색 기준 (1:제목, 2:내용, 3:전체)", "123");
-
+    // 검색 기준 유효성 검사
     if (choice == KEY_ESC)
     {
         printf("\n[알림] 검색이 취소되었습니다.\n");
         Sleep(1000);
         return false;
     }
-
+    // 검색 기준 설정
     if (choice == '1')
         field = "title";
     else if (choice == '2')
         field = "content";
     else // '3'
         field = "all";
-
+    // 검색어 입력받기
     if (!get_line_input(keyword, sizeof(keyword), "검색어"))
     {
         printf("\n[알림] 검색이 취소되었습니다.\n");
         Sleep(1000);
         return false;
     }
-
     // 입력된 키워드의 앞뒤 공백 제거
     trim_whitespace(keyword);
-
+    // 검색어 유효성 검사
     if (strlen(keyword) == 0)
     {
         printf("\n[오류] 검색어는 비워둘 수 없습니다. 공백만 입력할 수 없습니다.\n");
@@ -539,11 +540,11 @@ static bool prompt_and_execute_search(SOCKET sock, const char *user_id)
     // 검색어 복사
     strncpy(g_search_keyword, keyword, sizeof(g_search_keyword) - 1);
     g_search_keyword[sizeof(g_search_keyword) - 1] = '\0';
-
     // 요청 전송
     char request[REQUEST_BUF_SIZE], reply[REPLY_BUF_SIZE];
+    // 요청 전송
     snprintf(request, sizeof(request), "MEMO_SEARCH:%s:%s:%s", user_id, field, keyword);
-    // 서버 응답 파싱
+    // 서버 응답 확인
     if (communicate_with_server(sock, request, reply))
     {
         // 서버 응답 파싱
@@ -595,23 +596,41 @@ static void handle_download_process(SOCKET sock, const char *user_id, int memo_i
         ext = "csv";
     }
 
-    // 2. 파일명 생성
+    // 실행 파일 위치 기반 절대 경로 생성 (안정성 강화)
+    char exe_path[MAX_PATH];
+    GetModuleFileName(NULL, exe_path, MAX_PATH); // ps_client.exe의 전체 경로 획득
+
+    // 경로에서 파일 이름(ps_client.exe) 제거 -> 프로젝트 루트 경로가 됨
+    char *last_slash = strrchr(exe_path, '\\');
+    if (last_slash != NULL)
+    {
+        *last_slash = '\0';
+    }
+    // 절대 경로 생성 완료
+    // downloads 디렉터리 확인 및 생성
+    char download_dir[MAX_PATH];
+    snprintf(download_dir, sizeof(download_dir), "%s\\downloads", exe_path);
+    struct stat st = {0};
+    if (stat(download_dir, &st) == -1)
+    {
+        _mkdir(download_dir);
+    }
+    // 파일명 생성 (절대 경로 사용)
     char filepath[MAX_PATH];
     time_t t = time(NULL);
     struct tm now;
     localtime_s(&now, &t);
-
-    if (memo_id != -1) // 개별 메모 다운로드
+    // 개별 메모 다운로드
+    if (memo_id != -1)
     {
-        snprintf(filepath, sizeof(filepath), "downloads/memo_%s_%d_%d%02d%02d.%s", user_id, memo_id, now.tm_year + 1900, now.tm_mon + 1, now.tm_mday, ext);
+        snprintf(filepath, sizeof(filepath), "%s\\memo_%s_%d_%d%02d%02d.%s", download_dir, user_id, memo_id, now.tm_year + 1900, now.tm_mon + 1, now.tm_mday, ext);
     }
+    // 전체 메모 다운로드
     else
     {
-        // 이 로직은 현재 사용되지 않지만, 만약을 위해 유지합니다.
-        snprintf(filepath, sizeof(filepath), "downloads/allmemo_%s_%d%02d%02d.%s", user_id, now.tm_year + 1900, now.tm_mon + 1, now.tm_mday, ext);
+        snprintf(filepath, sizeof(filepath), "%s\\allmemo_%s_%d%02d%02d.%s", download_dir, user_id, now.tm_year + 1900, now.tm_mon + 1, now.tm_mday, ext);
     }
-
-    // 3. 파일 존재 여부 확인
+    // 파일 존재 여부 확인
     FILE *file_check;
     if (fopen_s(&file_check, filepath, "r") == 0)
     {
@@ -625,9 +644,13 @@ static void handle_download_process(SOCKET sock, const char *user_id, int memo_i
             return;
         }
     }
-
-    // 4. 최종 확인
-    printf("\n'downloads' 폴더에 '%s'(으)로 저장하시겠습니까?", filepath + strlen("downloads/"));
+    // 최종 확인 (사용자에게는 상대 경로처럼 보여주기)
+    char *display_path = strstr(filepath, "downloads\\");
+    if (display_path == NULL)
+    {
+        display_path = filepath; // 예외처리: 못찾으면 전체 경로 표시
+    }
+    printf("\n'downloads' 폴더에 '%s'(으)로 저장하시겠습니까?", display_path + strlen("downloads\\"));
     choice = get_single_choice_input(" (Y/N)", "yYnN");
     if (choice == 'n' || choice == 'N' || choice == KEY_ESC)
     {
@@ -635,8 +658,7 @@ static void handle_download_process(SOCKET sock, const char *user_id, int memo_i
         Sleep(1000);
         return;
     }
-
-    // 5. 서버 요청
+    // 서버 요청
     char request[REQUEST_BUF_SIZE], reply[REPLY_BUF_SIZE];
     if (memo_id == -1)
     {
@@ -654,8 +676,7 @@ static void handle_download_process(SOCKET sock, const char *user_id, int memo_i
         Sleep(1500);
         return;
     }
-
-    // 6. 데이터 수신 및 파일 저장
+    // 데이터 수신 및 파일 저장
     const char *data_to_save = reply + 3;
     FILE *file;
     if (fopen_s(&file, filepath, "w") != 0 || file == NULL)
@@ -666,8 +687,7 @@ static void handle_download_process(SOCKET sock, const char *user_id, int memo_i
     }
     fprintf(file, "%s", data_to_save);
     fclose(file);
-
-    // 7. 결과 안내
+    // 결과 안내
     printf("\n[성공] 다운로드가 완료되었습니다. (%s)\n", filepath);
     Sleep(1500);
 }
@@ -786,21 +806,26 @@ void memo_menu_loop(SOCKET sock, const char *logged_in_id)
                 view_memo_details(sock, logged_in_id);
                 needs_update = true; // 상세보기 후, 화면을 새로고침
                 break;
+            // 메모 추가
             case '1':
                 add_new_memo(sock, logged_in_id);
                 needs_update = true;
                 break;
+            // 메모 수정
             case '2':
                 update_existing_memo(sock, logged_in_id);
                 needs_update = true;
                 break;
+            // 메모 삭제
             case '3':
                 delete_existing_memo(sock, logged_in_id);
                 needs_update = true;
                 break;
+            // 검색
             case '4': // 월별 모드에서만 '검색'으로 동작
                 if (g_view_mode == MODE_MONTHLY)
                 {
+                    // 검색 요청 전송
                     if (prompt_and_execute_search(sock, logged_in_id))
                     {
                         current_page = 0;

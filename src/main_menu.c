@@ -10,7 +10,7 @@
 #include <ctype.h>
 #include <conio.h>
 #include <windows.h>
-#include <time.h> // for time()
+#include <time.h>
 
 #define REQUEST_BUF_SIZE 2048
 #define REPLY_BUF_SIZE 65536
@@ -39,7 +39,7 @@ static bool communicate_with_server(SOCKET sock, const char *request, char *repl
     return true;
 }
 
-// 전체 메모 다운로드 과정을 처리하는 함수
+// 전체 메모 다운로드 처리
 static void handle_all_memos_download(SOCKET sock, const char *user_id)
 {
     clear_screen();
@@ -74,7 +74,7 @@ static void handle_all_memos_download(SOCKET sock, const char *user_id)
         ext = "xml";
     }
     else
-    { // choice == '5'
+    {
         format_str = "CSV";
         ext = "csv";
     }
@@ -186,8 +186,18 @@ void main_menu_loop(SOCKET sock, const char *user_id)
             printf("--- 비밀번호 변경 ---\n");
             if (!get_secure_input(old_pw, sizeof(old_pw), "기존 비밀번호", true, true))
                 continue;
+
+            printf("  * 새 비밀번호: 공백 없이 %d~%d자 이내\n", MIN_PW_LEN, MAX_PW_LEN);
             if (!get_secure_input(new_pw, sizeof(new_pw), "새 비밀번호", true, true))
                 continue;
+
+            // 비밀번호 길이 검사
+            if (strlen(new_pw) < MIN_PW_LEN)
+            {
+                printf("[클라이언트] 비밀번호는 최소 %d자 이상이어야 합니다.\n", MIN_PW_LEN);
+                break;
+            }
+
             if (!get_secure_input(new_pw2, sizeof(new_pw2), "새 비밀번호 확인", true, true))
                 continue;
 

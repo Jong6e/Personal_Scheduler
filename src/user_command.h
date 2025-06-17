@@ -8,4 +8,4 @@
 // - reply: 서버가 클라이언트에게 보낼 응답 문자열을 저장할 버퍼
 void handle_user_command(const char *request, char *reply, int reply_size);
 
-#endif // USER_COMMAND_H
+#endif

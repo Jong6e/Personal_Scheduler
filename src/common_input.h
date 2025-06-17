@@ -24,4 +24,4 @@ bool get_line_input(char *buffer, int buffer_size, const char *prompt);
 // 메뉴 선택을 위한 단일 문자 입력을 받는 함수 (ESC로 취소 가능)
 char get_single_choice_input(const char *prompt, const char *valid_choices);
 
-#endif // COMMON_INPUT_H
+#endif

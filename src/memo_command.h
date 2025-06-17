@@ -9,4 +9,4 @@
 // - reply_size: 응답 버퍼의 크기
 void handle_memo_command(const char *request, char *reply, int reply_size);
 
-#endif // MEMO_COMMAND_H
+#endif

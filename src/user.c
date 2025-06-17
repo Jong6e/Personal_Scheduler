@@ -14,16 +14,20 @@ static UserNode *user_list_head = NULL;
 // 새로운 UserNode를 생성하고 초기화
 UserNode *create_user_node(const char *id, const char *pw)
 {
+    // 사용자 노드 메모리 할당
     UserNode *newNode = (UserNode *)malloc(sizeof(UserNode));
     if (newNode == NULL)
     {
         perror("[에러] 사용자 노드 메모리 할당 실패");
         return NULL;
     }
+    // 사용자 노드 초기화
     strncpy(newNode->user.id, id, MAX_ID_LEN - 1);
     newNode->user.id[MAX_ID_LEN - 1] = '\0';
+    // 사용자 비밀번호 복사
     strncpy(newNode->user.pw, pw, MAX_PW_LEN - 1);
     newNode->user.pw[MAX_PW_LEN - 1] = '\0';
+    // 다음 노드 초기화
     newNode->next = NULL;
     return newNode;
 }
@@ -44,9 +48,12 @@ void user_init()
         return;
     }
 
+    // 사용자 정보 파일 읽기
     char id[MAX_ID_LEN], pw[MAX_PW_LEN];
+    // 파일에서 사용자 정보 읽기
     while (fscanf(file, "%49[^:]:%49[^\n]\n", id, pw) == 2)
     {
+        // 사용자 정보 추가
         user_add(id, pw);
     }
 
@@ -57,14 +64,17 @@ void user_init()
 // 연결 리스트의 모든 노드 메모리를 해제
 void user_cleanup()
 {
+    // 연결 리스트의 모든 노드 메모리 해제
     UserNode *current = user_list_head;
     UserNode *next_node;
     while (current != NULL)
     {
+        // 다음 노드 저장
         next_node = current->next;
         free(current);
         current = next_node;
     }
+    // 연결 리스트 헤드 초기화
     user_list_head = NULL;
     printf("[정보] 모든 사용자 정보 메모리를 해제했습니다.\n");
 }
@@ -72,9 +82,11 @@ void user_cleanup()
 // ID로 사용자를 찾아 User 구조체 포인터를 반환
 User *user_find_by_id(const char *id)
 {
+    // 연결 리스트의 모든 노드 탐색
     UserNode *current = user_list_head;
     while (current != NULL)
     {
+        // ID 비교
         if (strcmp(current->user.id, id) == 0)
         {
             return &(current->user);
@@ -93,6 +105,7 @@ bool user_add(const char *id, const char *pw)
         return false;
     }
 
+    // 사용자 노드 생성
     UserNode *newNode = create_user_node(id, pw);
     if (newNode == NULL)
     {
@@ -106,6 +119,7 @@ bool user_add(const char *id, const char *pw)
     }
     else
     {
+        // 리스트의 끝에 추가
         UserNode *current = user_list_head;
         while (current->next != NULL)
         {
@@ -121,6 +135,7 @@ bool user_add(const char *id, const char *pw)
 // ID로 사용자를 찾아 연결 리스트에서 삭제
 bool user_delete_by_id(const char *id)
 {
+    // 연결 리스트의 모든 노드 탐색
     UserNode *current = user_list_head;
     UserNode *prev = NULL;
 
@@ -154,11 +169,13 @@ bool user_delete_by_id(const char *id)
 // 사용자의 비밀번호를 변경
 bool user_update_password(const char *id, const char *new_pw)
 {
+    // ID로 사용자를 찾아 비밀번호 변경
     User *user = user_find_by_id(id);
     if (user == NULL)
     {
         return false;
     }
+    // 비밀번호 변경
     strncpy(user->pw, new_pw, MAX_PW_LEN - 1);
     user->pw[MAX_PW_LEN - 1] = '\0';
 
@@ -169,6 +186,7 @@ bool user_update_password(const char *id, const char *new_pw)
 // 현재 연결 리스트의 모든 사용자 정보를 파일에 저장
 void user_save_to_file()
 {
+    // 사용자 정보 파일 열기
     FILE *file = fopen(USERS_FILE, "w");
     if (file == NULL)
     {
@@ -176,14 +194,14 @@ void user_save_to_file()
         return;
     }
 
+    // 연결 리스트의 모든 노드 탐색
     UserNode *current = user_list_head;
     while (current != NULL)
     {
+        // 사용자 정보 파일에 저장
         fprintf(file, "%s:%s\n", current->user.id, current->user.pw);
         current = current->next;
     }
-
+    // 파일 닫기
     fclose(file);
 }
-
-// user_get_all 함수는 삭제됨
