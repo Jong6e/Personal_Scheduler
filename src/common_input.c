@@ -40,9 +40,11 @@ bool get_secure_input(char *buffer, int buffer_size, const char *prompt, bool is
         // Enter 키 입력 시
         if (ch == KEY_ENTER)
         {
-            // 입력된 내용이 없으면 Enter 키를 무시, 사용자의 빈 값 제출 방지
+            // 입력된 내용이 없으면 Enter 키를 무시하여, 사용자가 빈 값을 제출하는 것을 방지합니다.
             if (i == 0)
+            {
                 continue;
+            }
             printf("\n");
             break;
         }
@@ -56,7 +58,7 @@ bool get_secure_input(char *buffer, int buffer_size, const char *prompt, bool is
                 char *ptr = &buffer[i - 1]; // 버퍼의 마지막 바이트를 가리킴
 
                 // 마지막 바이트부터 거꾸로 탐색하여 문자의 시작점을 찾음
-                // UTF-8 연속 바이트는 10xxxxxx 형식
+                // UTF-8 연속 바이트는 10xxxxxx 형식임
                 while (ptr > buffer && (*ptr & 0xC0) == 0x80)
                 {
                     ptr--;
@@ -81,7 +83,7 @@ bool get_secure_input(char *buffer, int buffer_size, const char *prompt, bool is
         // 그 외 키 입력 시
         else
         {
-            // 특수 키는 무시
+            // 특수 키(방향키 등)는 무시
             if (ch == 0xE0 || ch == 0x00)
             {
                 _getch();
@@ -131,16 +133,15 @@ char get_single_choice_input(const char *prompt, const char *valid_choices)
 
     while (true)
     {
-        // 키 입력 받기
         int ch = _getch();
-        // ESC 키 입력 시
+
         if (ch == KEY_ESC)
         {
             printf("\n[입력 취소]\n");
             Sleep(500);
             return KEY_ESC;
         }
-        // 유효한 선택 문자 입력 시
+
         if (valid_choices != NULL && strchr(valid_choices, ch) != NULL)
         {
             printf("%c\n", ch);

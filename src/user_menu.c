@@ -34,41 +34,6 @@ static bool communicate_with_server(SOCKET sock, const char *request, char *repl
     return true;
 }
 
-// 프로그램 종료
-void exit_program(SOCKET sock)
-{
-    char request[BUF_SIZE] = "EXIT";
-    char reply[BUF_SIZE];
-
-    printf("\n[클라이언트] 서버에 종료 요청을 보냅니다...\n");
-
-    // 서버에 종료 요청 전송
-    if (sock != INVALID_SOCKET)
-    {
-        if (send(sock, request, strlen(request), 0) < 0)
-        {
-            printf("[클라이언트] 서버에 종료 요청 전송 실패\n");
-        }
-        else
-        {
-            // 서버의 응답 대기
-            int bytes = recv(sock, reply, BUF_SIZE - 1, 0);
-            if (bytes > 0)
-            {
-                reply[bytes] = '\0';
-                printf("[클라이언트] %s\n", reply + 3); // "OK:" 이후 메시지 출력
-            }
-
-            closesocket(sock);
-        }
-    }
-
-    WSACleanup();
-    printf("[클라이언트] 프로그램을 종료합니다.\n");
-    Sleep(1000);
-    exit(0);
-}
-
 // 로그인 이전 메뉴 (로그인, 회원가입, 종료)
 void user_menu_loop(SOCKET sock)
 {
@@ -79,7 +44,6 @@ void user_menu_loop(SOCKET sock)
     // 요청, 응답 버퍼
     char request[BUF_SIZE], reply[BUF_SIZE];
 
-    // 메뉴 루프
     while (true)
     {
         clear_screen();
@@ -119,8 +83,8 @@ void user_menu_loop(SOCKET sock)
             if (communicate_with_server(sock, request, reply) && strncmp(reply, "OK", 2) == 0)
             {
                 printf("[클라이언트] %s\n", reply + 3);
-                Sleep(500);
                 // 메인 메뉴 루프 진입
+                Sleep(500);
                 main_menu_loop(sock, id);
             }
             else
@@ -152,7 +116,6 @@ void user_menu_loop(SOCKET sock)
                     has_digit = true;
             }
 
-            // 아이디 영문/숫자 조합 검사
             if (!has_alpha || !has_digit)
             {
                 printf("[클라이언트] 아이디는 영문과 숫자를 모두 포함해야 합니다.\n");
@@ -205,4 +168,39 @@ void user_menu_loop(SOCKET sock)
         printf("\n계속하려면 아무 키나 누르세요...");
         getch();
     }
+}
+
+// 프로그램 종료
+void exit_program(SOCKET sock)
+{
+    char request[BUF_SIZE] = "EXIT";
+    char reply[BUF_SIZE];
+
+    printf("\n[클라이언트] 서버에 종료 요청을 보냅니다...\n");
+
+    // 서버에 종료 요청 전송
+    if (sock != INVALID_SOCKET)
+    {
+        if (send(sock, request, strlen(request), 0) < 0)
+        {
+            printf("[클라이언트] 서버에 종료 요청 전송 실패\n");
+        }
+        else
+        {
+            // 서버의 응답 대기
+            int bytes = recv(sock, reply, BUF_SIZE - 1, 0);
+            if (bytes > 0)
+            {
+                reply[bytes] = '\0';
+                printf("[클라이언트] %s\n", reply + 3); // "OK:" 이후 메시지 출력
+            }
+
+            closesocket(sock);
+        }
+    }
+
+    WSACleanup();
+    printf("[클라이언트] 프로그램을 종료합니다.\n");
+    Sleep(1000);
+    exit(0);
 }

@@ -6,9 +6,9 @@
 #include <stdbool.h>
 #include <winsock2.h>
 
-#define KEY_ESC 27
-#define KEY_ENTER 13
-#define KEY_BACKSPACE 8
+#define KEY_ESC 27      // ESC 키
+#define KEY_ENTER 13    // 엔터 키
+#define KEY_BACKSPACE 8 // 백스페이스 키
 
 // 콘솔 화면을 깨끗하게 지우는 함수
 void clear_screen();

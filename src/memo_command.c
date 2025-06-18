@@ -3,7 +3,7 @@
 #include "memo_command.h"
 #include "memo.h"
 #include "export_util.h"
-#include "user.h" // For USER_ID_MAX
+#include "user.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -95,8 +95,9 @@ void handle_memo_command(const char *request, char *reply, int reply_size)
         // 연도와 월이 모두 있는 경우
         if (year_str && month_str)
         {
-            // 연도와 월 변환
+            // 연도 변환
             int year = atoi(year_str);
+            // 월 변환
             int month = atoi(month_str);
             // 메모 목록 조회
             if (!memo_list_by_month(user_id, year, month, reply, reply_size))
@@ -104,6 +105,7 @@ void handle_memo_command(const char *request, char *reply, int reply_size)
                 // 실패 메시지는 함수 내에서 생성됨
             }
         }
+        // 연도와 월이 모두 없는 경우
         else
         {
             snprintf(reply, reply_size, "FAIL:연도와 월 정보가 필요합니다.");
@@ -117,13 +119,12 @@ void handle_memo_command(const char *request, char *reply, int reply_size)
         // 제목이 있는 경우
         if (title)
         {
-            // 내용 파싱
             char *content = title + strlen(title) + 1;
-            // 내용의 앞쪽 공백 및 깨진 문자 제거
+
             // 제목과 내용의 앞쪽 공백 및 깨진 문자 제거
             title = trim_leading_garbage(title);
             content = trim_leading_garbage(content);
-            // 메모 추가
+
             if (content && *content && memo_add(user_id, title, content))
             {
                 memo_save_all_to_files(); // 변경사항 즉시 저장
@@ -168,12 +169,13 @@ void handle_memo_command(const char *request, char *reply, int reply_size)
         // 메모 ID가 있는 경우
         if (memo_id_str)
         {
-            // 내용 파싱
+            // 메모 ID 변환
             char *content = memo_id_str + strlen(memo_id_str) + 1;
             int memo_id = atoi(memo_id_str);
+
             // 내용의 앞쪽 공백 및 깨진 문자 제거
             content = trim_leading_garbage(content);
-            // 메모 수정
+
             if (content && *content && memo_update(memo_id, user_id, content))
             {
                 memo_save_all_to_files(); // 변경사항 즉시 저장
@@ -199,10 +201,8 @@ void handle_memo_command(const char *request, char *reply, int reply_size)
         {
             // 메모 ID 변환
             int memo_id = atoi(memo_id_str);
-            // 메모 삭제
             if (memo_delete(memo_id, user_id))
             {
-                // 변경사항 즉시 저장
                 memo_save_all_to_files();
                 snprintf(reply, reply_size, "OK:메모가 성공적으로 삭제되었습니다.");
             }
@@ -219,19 +219,17 @@ void handle_memo_command(const char *request, char *reply, int reply_size)
     // 메모 검색
     else if (strcmp(command, "MEMO_SEARCH") == 0)
     {
-        // 필드 파싱
+        // 검색 필드 파싱
         char *field = strtok(NULL, DELIMITER);
-        // 필드가 있는 경우
+        // 검색 필드가 있는 경우
         if (field)
         {
-            // 키워드 파싱
+            // 검색어 파싱
             char *keyword = field + strlen(field) + 1;
-            // 키워드가 있는 경우
             if (*keyword && !memo_search(user_id, field, keyword, reply, reply_size))
             {
                 // 실패 메시지는 함수 내부에서 생성됨
             }
-            // 키워드가 없는 경우
             else if (!*keyword)
             {
                 snprintf(reply, reply_size, "FAIL:검색어가 필요합니다.");
@@ -254,17 +252,16 @@ void handle_memo_command(const char *request, char *reply, int reply_size)
         {
             // 메모 ID 변환
             int memo_id = atoi(memo_id_str);
-            // 메모 상세 조회
+            // 메모 조회
             const Memo *memo = memo_get_by_id_internal(memo_id, user_id);
             // 메모가 있는 경우
             if (memo)
             {
-                // 메모 다운로드
+                // 메모 내보내기
                 char *exported_string = export_single_memo_to_string(memo, format);
-                // 다운로드 문자열이 있는 경우
+                // 내보내기 성공 시
                 if (exported_string)
                 {
-                    // 버퍼에 다운로드 문자열 저장
                     snprintf(reply, reply_size, "OK:%s", exported_string);
                     free(exported_string);
                 }
@@ -292,17 +289,17 @@ void handle_memo_command(const char *request, char *reply, int reply_size)
         if (format)
         {
             // 최대 1024개 메모 가정
-            Memo user_memos[1024]; // 최대 1024개 메모 가정
+            Memo user_memos[1024];
+            // 메모 개수 조회
             int memo_count = memo_get_all_for_user_internal(user_id, user_memos, 1024);
             // 메모가 있는 경우
             if (memo_count > 0)
             {
-                // 메모 목록 다운로드
+                // 메모 내보내기
                 char *exported_string = export_all_memos_to_string(user_memos, memo_count, format);
-                // 다운로드 문자열이 있는 경우
+                // 내보내기 성공 시
                 if (exported_string)
                 {
-                    // 버퍼에 다운로드 문자열 저장
                     snprintf(reply, reply_size, "OK:%s", exported_string);
                     free(exported_string);
                 }

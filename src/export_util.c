@@ -8,15 +8,17 @@
 #include <stdbool.h>
 
 // 내부 헬퍼 함수 선언
-static char *format_memo_as_md(const Memo *memo);
-static char *format_memo_as_txt(const Memo *memo);
-static char *format_memo_as_json(const Memo *memo);
-static char *format_memo_as_xml(const Memo *memo);
+static char *format_memo_as_md(const Memo *memo);   // MD 포맷 변환
+static char *format_memo_as_txt(const Memo *memo);  // TXT 포맷 변환
+static char *format_memo_as_json(const Memo *memo); // JSON 포맷 변환
+static char *format_memo_as_xml(const Memo *memo);  // XML 포맷 변환
 
 // XML 특수문자 이스케이프 처리
 static void escape_xml_chars(const char *input, char *output, int out_size)
 {
+    // 인덱스 변수 선언
     int i = 0, j = 0;
+    // 입력 문자열이 끝나지 않고 출력 버퍼 크기를 초과하지 않는 동안 반복
     while (input[i] != '\0' && j < out_size - 6)
     {
         switch (input[i])
@@ -144,10 +146,12 @@ char *export_single_memo_to_string(const Memo *memo, const char *format)
     // CSV 포맷
     if (strcmp(format, "CSV") == 0)
     {
-        char buffer[2048];
-        char escaped_title[MAX_MEMO_TITLE_LEN * 2 + 3];
-        char escaped_content[MAX_MEMO_CONTENT_LEN * 2 + 3];
+        char buffer[2048];                                  // 버퍼 선언
+        char escaped_title[MAX_MEMO_TITLE_LEN * 2 + 3];     // 제목 이스케이프
+        char escaped_content[MAX_MEMO_CONTENT_LEN * 2 + 3]; // 내용 이스케이프
+        // 제목 이스케이프
         escape_csv_chars(memo->title, escaped_title, sizeof(escaped_title));
+        // 내용 이스케이프
         escape_csv_chars(memo->content, escaped_content, sizeof(escaped_content));
 
         // 헤더와 데이터를 함께 생성 + BOM 추가
@@ -185,14 +189,12 @@ char *export_all_memos_to_string(const Memo *memo_list, int memo_count, const ch
         offset += snprintf(result_buffer + offset, buffer_size - offset, "id,title,content,created_at,updated_at\n");
         for (int i = 0; i < memo_count; i++)
         {
-            // 특수문자 이스케이프
-            char escaped_title[MAX_MEMO_TITLE_LEN * 2 + 3];
-            char escaped_content[MAX_MEMO_CONTENT_LEN * 2 + 3];
-            // 타이틀 이스케이프
+            char escaped_title[MAX_MEMO_TITLE_LEN * 2 + 3];     // 제목 이스케이프
+            char escaped_content[MAX_MEMO_CONTENT_LEN * 2 + 3]; // 내용 이스케이프
+            // 제목 이스케이프
             escape_csv_chars(memo_list[i].title, escaped_title, sizeof(escaped_title));
-            // 컨텐트 이스케이프
+            // 내용 이스케이프
             escape_csv_chars(memo_list[i].content, escaped_content, sizeof(escaped_content));
-            // 버퍼에 메모 정보 저장
             offset += snprintf(result_buffer + offset, buffer_size - offset, "%d,\"%s\",\"%s\",\"=\"\"%s\"\"\",\"=\"\"%s\"\"\"\n", // 날짜/시간을 텍스트로 강제
                                memo_list[i].id, escaped_title, escaped_content, memo_list[i].created_at, memo_list[i].updated_at);
         }
@@ -200,21 +202,17 @@ char *export_all_memos_to_string(const Memo *memo_list, int memo_count, const ch
     // JSON 포맷
     else if (strcmp(format, "JSON") == 0)
     {
-        // 배열 시작
         offset += snprintf(result_buffer + offset, buffer_size - offset, "[\n");
         for (int i = 0; i < memo_count; i++)
         {
-            // 특수문자 이스케이프
-            char escaped_title[MAX_MEMO_TITLE_LEN * 6];
-            char escaped_content[MAX_MEMO_CONTENT_LEN * 6];
-            // 타이틀 이스케이프
+            char escaped_title[MAX_MEMO_TITLE_LEN * 6];     // 제목 이스케이프
+            char escaped_content[MAX_MEMO_CONTENT_LEN * 6]; // 내용 이스케이프
+            // 제목 이스케이프
             escape_json_chars(memo_list[i].title, escaped_title, sizeof(escaped_title));
-            // 컨텐트 이스케이프
+            // 내용 이스케이프
             escape_json_chars(memo_list[i].content, escaped_content, sizeof(escaped_content));
-            // 버퍼에 메모 정보 저장
             offset += snprintf(result_buffer + offset, buffer_size - offset, "  {\"id\":%d,\"title\":\"%s\",\"content\":\"%s\",\"created_at\":\"%s\",\"updated_at\":\"%s\"}",
                                memo_list[i].id, escaped_title, escaped_content, memo_list[i].created_at, memo_list[i].updated_at);
-            // 배열 종료
             if (i < memo_count - 1)
             {
                 offset += snprintf(result_buffer + offset, buffer_size - offset, ",\n");
@@ -225,22 +223,25 @@ char *export_all_memos_to_string(const Memo *memo_list, int memo_count, const ch
     // XML 포맷
     else if (strcmp(format, "XML") == 0)
     {
-        // 배열 시작
         offset += snprintf(result_buffer + offset, buffer_size - offset, "<memos>\n");
         for (int i = 0; i < memo_count; i++)
         {
-            // 특수문자 이스케이프
-            char escaped_title[MAX_MEMO_TITLE_LEN * 6];
-            char escaped_content[MAX_MEMO_CONTENT_LEN * 6];
-            // 타이틀 이스케이프
+            char escaped_title[MAX_MEMO_TITLE_LEN * 6];     // 제목 이스케이프
+            char escaped_content[MAX_MEMO_CONTENT_LEN * 6]; // 내용 이스케이프
+            // 제목 이스케이프
             escape_xml_chars(memo_list[i].title, escaped_title, sizeof(escaped_title));
-            // 컨텐트 이스케이프
+            // 내용 이스케이프
             escape_xml_chars(memo_list[i].content, escaped_content, sizeof(escaped_content));
-            // 버퍼에 메모 정보 저장
-            offset += snprintf(result_buffer + offset, buffer_size - offset, "  <memo>\n    <id>%d</id>\n    <title>%s</title>\n    <content>%s</content>\n    <created_at>%s</created_at>\n    <updated_at>%s</updated_at>\n  </memo>\n",
+            offset += snprintf(result_buffer + offset, buffer_size - offset,
+                               "  <memo>\n"
+                               "    <id>%d</id>\n"
+                               "    <title>%s</title>\n"
+                               "    <content>%s</content>\n"
+                               "    <created_at>%s</created_at>\n"
+                               "    <updated_at>%s</updated_at>\n"
+                               "  </memo>\n",
                                memo_list[i].id, escaped_title, escaped_content, memo_list[i].created_at, memo_list[i].updated_at);
         }
-        // 배열 종료
         offset += snprintf(result_buffer + offset, buffer_size - offset, "</memos>");
     }
     // MD & TXT 포맷
@@ -248,11 +249,9 @@ char *export_all_memos_to_string(const Memo *memo_list, int memo_count, const ch
     {
         for (int i = 0; i < memo_count; i++)
         {
-            // 단일 메모 변환
             char *single_memo_str = export_single_memo_to_string(&memo_list[i], format);
             if (single_memo_str)
             {
-                // 버퍼에 메모 정보 저장
                 offset += snprintf(result_buffer + offset, buffer_size - offset, "%s", single_memo_str);
                 if (strcmp(format, "MD") == 0)
                 {
@@ -295,10 +294,11 @@ static char *format_memo_as_txt(const Memo *memo)
 // JSON 포맷
 static char *format_memo_as_json(const Memo *memo)
 {
-    // JSON 특수문자 이스케이프 처리
-    char escaped_title[MAX_MEMO_TITLE_LEN * 6];
-    char escaped_content[MAX_MEMO_CONTENT_LEN * 6];
+    char escaped_title[MAX_MEMO_TITLE_LEN * 6];     // 제목 이스케이프
+    char escaped_content[MAX_MEMO_CONTENT_LEN * 6]; // 내용 이스케이프
+    // 제목 이스케이프
     escape_json_chars(memo->title, escaped_title, sizeof(escaped_title));
+    // 내용 이스케이프
     escape_json_chars(memo->content, escaped_content, sizeof(escaped_content));
 
     char buffer[2048];
@@ -319,10 +319,11 @@ static char *format_memo_as_json(const Memo *memo)
 // XML 포맷
 static char *format_memo_as_xml(const Memo *memo)
 {
-    // XML 특수문자 이스케이프 처리
-    char escaped_title[MAX_MEMO_TITLE_LEN * 6];
-    char escaped_content[MAX_MEMO_CONTENT_LEN * 6];
+    char escaped_title[MAX_MEMO_TITLE_LEN * 6];     // 제목 이스케이프
+    char escaped_content[MAX_MEMO_CONTENT_LEN * 6]; // 내용 이스케이프
+    // 제목 이스케이프
     escape_xml_chars(memo->title, escaped_title, sizeof(escaped_title));
+    // 내용 이스케이프
     escape_xml_chars(memo->content, escaped_content, sizeof(escaped_content));
 
     char buffer[2048];

@@ -12,12 +12,12 @@
 #include <windows.h>
 #include <time.h>
 
-#define REQUEST_BUF_SIZE 2048
-#define REPLY_BUF_SIZE 65536
+#define REQUEST_BUF_SIZE 2048 // 요청 버퍼 크기
+#define REPLY_BUF_SIZE 65536  // 응답 버퍼 크기
 
 // 함수 선언
-static bool communicate_with_server(SOCKET sock, const char *request, char *reply);
-static void handle_all_memos_download(SOCKET sock, const char *user_id);
+static bool communicate_with_server(SOCKET sock, const char *request, char *reply); // 서버와 통신하는 헬퍼 함수
+static void handle_all_memos_download(SOCKET sock, const char *user_id);            // 전체 메모 다운로드 처리
 
 // 서버와 통신하는 헬퍼 함수
 static bool communicate_with_server(SOCKET sock, const char *request, char *reply)
@@ -42,15 +42,20 @@ static bool communicate_with_server(SOCKET sock, const char *request, char *repl
 // 전체 메모 다운로드 처리
 static void handle_all_memos_download(SOCKET sock, const char *user_id)
 {
+    // 화면 지우기
     clear_screen();
+    // 전체 메모 다운로드 타이틀 출력
     printf("--- 전체 메모 다운로드 ---\n\n");
 
     // 1. 포맷 선택
+    // 포맷 선택 메시지 출력
     printf("다운로드할 파일 형식을 선택하세요.\n");
+    // 포맷 선택 입력 받기
     char choice = get_single_choice_input("1: Markdown (.md)\n2: 텍스트 (.txt)\n3: JSON (.json)\n4: XML (.xml)\n5: CSV (.csv)\n", "12345");
+    // ESC 입력 시 종료
     if (choice == KEY_ESC)
         return;
-
+    // 포맷 문자열 선언
     const char *format_str;
     const char *ext;
     if (choice == '1')
@@ -80,16 +85,23 @@ static void handle_all_memos_download(SOCKET sock, const char *user_id)
     }
 
     // 2. 파일명 생성
+    // 파일명 버퍼 선언
     char filepath[MAX_PATH];
+    // 현재 시간 가져오기
     time_t t = time(NULL);
+    // 현재 시간 구조체 선언
     struct tm now;
+    // 현재 시간 구조체 초기화
     localtime_s(&now, &t);
+    // 파일명 생성
     snprintf(filepath, sizeof(filepath), "downloads/allmemo_%s_%d%02d%02d.%s", user_id, now.tm_year + 1900, now.tm_mon + 1, now.tm_mday, ext);
 
     // 3. 파일 존재 여부 확인
     FILE *file_check;
+    // 파일 존재 여부 확인
     if (fopen_s(&file_check, filepath, "r") == 0)
     {
+        // 파일 존재 시
         fclose(file_check);
         printf("\n[경고] '%s' 파일이 이미 존재합니다.", filepath);
         char overwrite_choice = get_single_choice_input(" 덮어쓰시겠습니까? (Y/N)", "yYnN");
@@ -103,7 +115,9 @@ static void handle_all_memos_download(SOCKET sock, const char *user_id)
 
     // 4. 최종 확인
     printf("\n'downloads' 폴더에 '%s'(으)로 저장하시겠습니까?", filepath + strlen("downloads/"));
+    // 덮어쓰기 여부 확인
     choice = get_single_choice_input(" (Y/N)", "yYnN");
+    // ESC 입력 시 종료
     if (choice == 'n' || choice == 'N' || choice == KEY_ESC)
     {
         printf("\n[알림] 다운로드가 취소되었습니다.\n");
@@ -113,26 +127,34 @@ static void handle_all_memos_download(SOCKET sock, const char *user_id)
 
     // 5. 서버 요청
     char request[REQUEST_BUF_SIZE], reply[REPLY_BUF_SIZE];
+    // 요청 전송
     snprintf(request, sizeof(request), "DOWNLOAD_ALL:%s:%s", user_id, format_str);
-
+    // 다운로드 중 메시지 출력
     printf("\n다운로드 중...\n");
+    // 서버 요청
     if (!communicate_with_server(sock, request, reply) || strncmp(reply, "OK:", 3) != 0)
     {
+        // 다운로드 실패 메시지 출력
         printf("\n[오류] 다운로드에 실패했습니다: %s\n", reply + 3);
         Sleep(1500);
         return;
     }
 
     // 6. 데이터 수신 및 파일 저장
+    // 데이터 수신
     const char *data_to_save = reply + 3;
+    // 파일 열기
     FILE *file;
+    // 파일 열기 실패 시
     if (fopen_s(&file, filepath, "w") != 0 || file == NULL)
     {
         printf("\n[오류] 파일을 생성할 수 없습니다.\n");
         Sleep(1000);
         return;
     }
+    // 파일 저장
     fprintf(file, "%s", data_to_save);
+    // 파일 닫기
     fclose(file);
 
     // 7. 결과 안내

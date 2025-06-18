@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 
-#define DELIMITER ":"
+#define DELIMITER ":" // 구분자
 
 // ID 유효성 검사 (영문/숫자 조합, 길이 제한)
 static bool is_valid_id(const char *id)
@@ -142,26 +142,35 @@ void handle_user_command(const char *request, char *reply, int reply_size)
     // 회원탈퇴
     else if (strcmp(command, "DELETE_USER") == 0)
     {
+        // 아이디 파싱
         char *id = strtok(NULL, DELIMITER);
+        // 비밀번호 파싱
         char *pw = strtok(NULL, DELIMITER);
+        // 아이디 또는 비밀번호 없음
         if (id == NULL || pw == NULL)
         {
             snprintf(reply, reply_size, "FAIL:아이디 또는 비밀번호가 누락되었습니다.");
         }
         else
         {
+            // 사용자 조회
             User *user = user_find_by_id(id);
+            // 사용자 존재 및 비밀번호 일치 시
             if (user && strcmp(user->pw, pw) == 0)
             {
                 // 성공 시 파일 저장을 위해 id를 복사해둠
+                // 아이디 복사
                 char user_id_copy[MAX_ID_LEN];
                 strncpy(user_id_copy, id, sizeof(user_id_copy) - 1);
                 user_id_copy[sizeof(user_id_copy) - 1] = '\0';
 
+                // 사용자 삭제
                 if (user_delete_by_id(user_id_copy))
                 {
-                    user_save_to_file();                  // 사용자 목록 파일 저장
-                    memo_delete_by_user_id(user_id_copy); // 사용자의 메모도 함께 삭제
+                    // 사용자 목록 파일 저장
+                    user_save_to_file();
+                    // 사용자의 메모도 함께 삭제
+                    memo_delete_by_user_id(user_id_copy);
                     snprintf(reply, reply_size, "OK:회원 탈퇴 성공");
                 }
                 else
@@ -178,16 +187,22 @@ void handle_user_command(const char *request, char *reply, int reply_size)
     // 비밀번호 변경
     else if (strcmp(command, "UPDATE_PW") == 0)
     {
+        // 아이디 파싱
         char *id = strtok(NULL, DELIMITER);
+        // 기존 비밀번호 파싱
         char *old_pw = strtok(NULL, DELIMITER);
+        // 새 비밀번호 파싱
         char *new_pw = strtok(NULL, DELIMITER);
+        // 아이디 또는 기존 비밀번호 또는 새 비밀번호 없음
         if (id == NULL || old_pw == NULL || new_pw == NULL)
         {
             snprintf(reply, reply_size, "FAIL:필수 정보가 누락되었습니다.");
         }
         else
         {
+            // 사용자 조회
             User *user = user_find_by_id(id);
+            // 사용자 존재 및 기존 비밀번호 일치 시
             if (user && strcmp(user->pw, old_pw) == 0)
             {
                 // 새 비밀번호 유효성 검사
@@ -197,7 +212,8 @@ void handle_user_command(const char *request, char *reply, int reply_size)
                 }
                 else if (user_update_password(id, new_pw))
                 {
-                    user_save_to_file(); // 변경사항을 즉시 파일에 저장
+                    // 변경사항을 즉시 파일에 저장
+                    user_save_to_file();
                     snprintf(reply, reply_size, "OK:비밀번호 변경 성공");
                 }
                 else
